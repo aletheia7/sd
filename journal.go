@@ -236,22 +236,22 @@ func (j *Journal) Err_m(fields map[string]interface{}, a ...interface{}) error {
 	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_err)}...))
 }
 
-func (j *Journal) Warning_m(fields map[string]interface{}, a interface{}) error {
+func (j *Journal) Warning_m(fields map[string]interface{}, a ...interface{}) error {
 
 	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_warning)}...))
 }
 
-func (j *Journal) Notice_m(fields map[string]interface{}, a interface{}) error {
+func (j *Journal) Notice_m(fields map[string]interface{}, a ...interface{}) error {
 
 	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_notice)}...))
 }
 
-func (j *Journal) Info_m(fields map[string]interface{}, a interface{}) error {
+func (j *Journal) Info_m(fields map[string]interface{}, a ...interface{}) error {
 
 	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_info)}...))
 }
 
-func (j *Journal) Debug_m(fields map[string]interface{}, interface{}) error {
+func (j *Journal) Debug_m(fields map[string]interface{}, a ...interface{}) error {
 
 	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_debug)}...))
 }
