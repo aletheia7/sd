@@ -228,7 +228,7 @@ func (j *Journal) Alert_m(fields map[string]interface{}, a ...interface{}) error
 
 func (j *Journal) Crit_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintlna(a...), log_crit)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_crit)}...))
 }
 
 func (j *Journal) Err_m(fields map[string]interface{}, a ...interface{}) error {
