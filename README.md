@@ -1,4 +1,4 @@
-#### gstack 
+#### sd 
 sd is a go (golang) package. sd.Journal provides methods to write to the systemd journal
 
 #### Install 
