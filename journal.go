@@ -171,92 +171,92 @@ func (j *Journal) load_defaults(message string, priority priority) map[string]in
 	return j.default_fields
 }
 
-func (j *Journal) Emerg(message string) error {
+func (j *Journal) Emerg(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(message, log_emerg))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_emerg))
 }
 
 // Alert sends a message with LOG_ALERT priority (syslog severity).
 //
-// message: MESSAGE; see man systemd.journal-fields.
-func (j *Journal) Alert(message string) error {
+// a ...interface{}: fmt.Println formating will become MESSAGE; see man systemd.journal-fields.
+func (j *Journal) Alert(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(message, log_alert))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_alert))
 }
 
-func (j *Journal) Crit(message string) error {
+func (j *Journal) Crit(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(message, log_crit))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_crit))
 }
 
-func (j *Journal) Err(message string) error {
+func (j *Journal) Err(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(message, log_err))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_err))
 }
 
-func (j *Journal) Warning(message string) error {
+func (j *Journal) Warning(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(message, log_warning))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_warning))
 }
 
-func (j *Journal) Notice(message string) error {
+func (j *Journal) Notice(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(message, log_notice))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_notice))
 }
 
-func (j *Journal) Info(message string) error {
+func (j *Journal) Info(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(message, log_info))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_info))
 }
 
-func (j *Journal) Debug(message string) error {
+func (j *Journal) Debug(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(message, log_debug))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_debug))
 }
 
-func (j *Journal) Emerg_m(fields map[string]interface{}, message string) error {
+func (j *Journal) Emerg_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(message, log_emerg)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_emerg)}...))
 }
 
 // Alert_m sends a message with LOG_ALERT priority (syslog severity).
 //
 // fields: your user-defined systemd.journal-fields.
 //
-// message: MESSAGE; see man systemd.journal-fields.
-func (j *Journal) Alert_m(fields map[string]interface{}, message string) error {
+// a ...interface{}: fmt.Println formating will become MESSAGE; see man systemd.journal-fields.
+func (j *Journal) Alert_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(message, log_alert)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_alert)}...))
 }
 
-func (j *Journal) Crit_m(fields map[string]interface{}, message string) error {
+func (j *Journal) Crit_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(message, log_crit)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_crit)}...))
 }
 
-func (j *Journal) Err_m(fields map[string]interface{}, message string) error {
+func (j *Journal) Err_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(message, log_err)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_err)}...))
 }
 
-func (j *Journal) Warning_m(fields map[string]interface{}, message string) error {
+func (j *Journal) Warning_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(message, log_warning)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_warning)}...))
 }
 
-func (j *Journal) Notice_m(fields map[string]interface{}, message string) error {
+func (j *Journal) Notice_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(message, log_notice)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_notice)}...))
 }
 
-func (j *Journal) Info_m(fields map[string]interface{}, message string) error {
+func (j *Journal) Info_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(message, log_info)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_info)}...))
 }
 
-func (j *Journal) Debug_m(fields map[string]interface{}, message string) error {
+func (j *Journal) Debug_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(message, log_debug)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_debug)}...))
 }
 
 func (j *Journal) Emerg_m_f(fields map[string]interface{}, format string, a ...interface{}) error {
