@@ -357,7 +357,7 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 		i++
 	}
 	if j.send_stderr {
-		fmt.Fprintln(os.Stderr, fields[sd_message])
+		fmt.Fprintf(os.Stderr, "%v", fields[sd_message])
 	}
 	n, _ := C.sd_journal_sendv(&iov[0], C.int(len(iov)))
 	if n != 0 {
