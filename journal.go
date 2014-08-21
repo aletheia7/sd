@@ -42,6 +42,7 @@ import (
 	"bytes"
 	"regexp"
 	"strconv"
+	"os"
 	// See github.com:aletheia7/gstack
 	"sd/gstack"
 )
@@ -70,6 +71,7 @@ var (
 	id128							map[string]interface{}
 	sd_field_name_sep_b				= []byte{61}
 	sd_field_name_sep_s				= string(sd_field_name_sep_b)
+	default_send_stderr				bool
 )
 
 //
@@ -98,6 +100,7 @@ type Journal struct {
 	default_fields			map[string]interface{}
 	lock					sync.Mutex
 	add_go_code_fields		bool
+	send_stderr				bool
 }
 
 // New_journal makes a Journal.
@@ -111,7 +114,7 @@ func New_journal() *Journal {
 // The allowable interface{} values are string and []byte
 func New_journal_m(default_fields map[string]interface{}) *Journal {
 
-	j := &Journal{add_go_code_fields: true}
+	j := &Journal{add_go_code_fields: true, send_stderr: default_send_stderr}
 	j.Set_default_fields(default_fields)
 	return j
 }
@@ -353,6 +356,9 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 		}
 		i++
 	}
+	if j.send_stderr {
+		fmt.Fprintln(os.Stderr, fields[sd_message])
+	}
 	n, _ := C.sd_journal_sendv(&iov[0], C.int(len(iov)))
 	if n != 0 {
 		return errors.New("Error with sd_journal_sendv arguments")
@@ -369,6 +375,14 @@ func (j *Journal) Set_add_go_code_fields(use bool) {
 	j.add_go_code_fields = use
 }
 
+// Set_send_stderr will send message to os.Stderr in addition to the systemd journal.
+//
+// Default: see Set_default_send_stderr()
+func (j *Journal) Set_send_stderr(use bool) {
+
+	j.send_stderr = use
+}
+
 // Set_message_id sets the systemd MESSAGE_ID (UUID) for all Journal (Global) instances.
 // Generate an application UUID with journalctl --new-id128.
 // See man journalctl.
@@ -381,4 +395,14 @@ func Set_message_id(uuid string) {
 	} else {
 		id128 = map[string]interface{}{sd_message_id: uuid}
 	}
+}
+
+// Set_default_send_stderr will change the default for newly created Journal struct 
+//
+// See Set_send_stderr() to change a existing Journal struct
+//
+// Default: false
+func Set_default_send_stderr(use bool) {
+
+	default_send_stderr = use
 }

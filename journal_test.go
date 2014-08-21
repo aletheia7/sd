@@ -24,6 +24,7 @@ import (
 )
 
 func Test_Info(t *testing.T) {
+
 	j := New_journal()
 	if err := j.Info("Info test"); err != nil {
 		t.Error(err)
