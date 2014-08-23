@@ -19,8 +19,8 @@
 package sd_test
 
 import (
-	"testing"
 	. "sd"
+	"testing"
 )
 
 func Test_Info(t *testing.T) {

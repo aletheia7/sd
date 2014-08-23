@@ -27,6 +27,7 @@
 // fields to the journal to indicate where the methods were called. The *_m_f methods
 // can take nil map in order to only use the format functionality.
 package sd
+
 // #cgo pkg-config: --cflags --libs libsystemd-journal
 // #include <stdlib.h>
 // #include <systemd/sd-journal.h>
@@ -34,15 +35,15 @@ package sd
 //
 import "C"
 import (
-	"unsafe"
-	"errors"
-	"log/syslog"
-	"fmt"
-	"sync"
 	"bytes"
+	"errors"
+	"fmt"
+	"log/syslog"
+	"os"
 	"regexp"
 	"strconv"
-	"os"
+	"sync"
+	"unsafe"
 	// See github.com:aletheia7/gstack
 	"sd/gstack"
 )
@@ -52,55 +53,61 @@ func init() {
 	valid_field, _ = regexp.Compile(Sd_valid_field_regexp)
 }
 
-
 type priority string
 
 // These are os/syslog.Priority values
 var (
-	log_emerg						priority = priority(strconv.FormatInt(int64(syslog.LOG_EMERG) ,10))
-	log_alert						priority = priority(strconv.FormatInt(int64(syslog.LOG_ALERT) ,10))
-	log_crit						priority = priority(strconv.FormatInt(int64(syslog.LOG_CRIT) ,10))
-	log_err							priority = priority(strconv.FormatInt(int64(syslog.LOG_ERR) ,10))
-	log_warning						priority = priority(strconv.FormatInt(int64(syslog.LOG_WARNING) ,10))
-	log_notice						priority = priority(strconv.FormatInt(int64(syslog.LOG_NOTICE) ,10))
-	log_info						priority = priority(strconv.FormatInt(int64(syslog.LOG_INFO) ,10))
-	log_debug						priority = priority(strconv.FormatInt(int64(syslog.LOG_DEBUG) ,10))
-	message_priority				= map[string]interface{}{sd_message: ``, sd_priority: ``}
-	valid_field *regexp.Regexp
-	max_fields						uint64
-	id128							map[string]interface{}
-	sd_field_name_sep_b				= []byte{61}
-	sd_field_name_sep_s				= string(sd_field_name_sep_b)
-	default_send_stderr				bool
+	log_emerg           priority = priority(strconv.FormatInt(int64(syslog.LOG_EMERG), 10))
+	log_alert           priority = priority(strconv.FormatInt(int64(syslog.LOG_ALERT), 10))
+	log_crit            priority = priority(strconv.FormatInt(int64(syslog.LOG_CRIT), 10))
+	log_err             priority = priority(strconv.FormatInt(int64(syslog.LOG_ERR), 10))
+	log_warning         priority = priority(strconv.FormatInt(int64(syslog.LOG_WARNING), 10))
+	log_notice          priority = priority(strconv.FormatInt(int64(syslog.LOG_NOTICE), 10))
+	log_info            priority = priority(strconv.FormatInt(int64(syslog.LOG_INFO), 10))
+	log_debug           priority = priority(strconv.FormatInt(int64(syslog.LOG_DEBUG), 10))
+	message_priority             = map[string]interface{}{sd_message: ``, sd_priority: ``}
+	valid_field         *regexp.Regexp
+	max_fields          uint64
+	id128               map[string]interface{}
+	sd_field_name_sep_b             = []byte{61}
+	sd_field_name_sep_s             = string(sd_field_name_sep_b)
+	default_send_stderr send_stderr = Sd_send_stderr_allow_override
 )
 
 //
-// See 
+// See
 // http://www.freedesktop.org/software/systemd/man/SD_JOURNAL_SUPPRESS_LOCATION.html
 // , or man sd_journal_print, for valid systemd journal fields.
 const (
-	sd_message						string = "MESSAGE"
+	sd_message string = "MESSAGE"
 	// UUID
 	// See man journalctl --new-id128
-	sd_message_id					string = "MESSAGE_ID"
-	// Used in Set_default_fields(). systemd provides a default 
-	Sd_tag							string = "SYSLOG_IDENTIFIER"
-	sd_priority						string = "PRIORITY"
-	sd_go_func						string = "GO_FUNC"
-	sd_go_file						string = "GO_FILE"
-	sd_go_line						string = "GO_LINE"
-	// Fields are validated by this regexp. 
-	Sd_valid_field_regexp			string = `^[^_]{1}[\p{Lu}0-9_]*$`
+	sd_message_id string = "MESSAGE_ID"
+	// Used in Set_default_fields(). systemd provides a default
+	Sd_tag      string = "SYSLOG_IDENTIFIER"
+	sd_priority string = "PRIORITY"
+	sd_go_func  string = "GO_FUNC"
+	sd_go_file  string = "GO_FILE"
+	sd_go_line  string = "GO_LINE"
+	// Fields are validated by this regexp.
+	Sd_valid_field_regexp string = `^[^_]{1}[\p{Lu}0-9_]*$`
+)
+
+type send_stderr int
+
+const (
+	Sd_send_stderr_allow_override send_stderr = iota
+	Sd_send_stderr_true           send_stderr = iota
+	Sd_send_stderr_false          send_stderr = iota
 )
 
 // Journal can contain default systemd fields.
 // See Set_default_fields().
 type Journal struct {
-
-	default_fields			map[string]interface{}
-	lock					sync.Mutex
-	add_go_code_fields		bool
-	send_stderr				bool
+	default_fields     map[string]interface{}
+	lock               sync.Mutex
+	add_go_code_fields bool
+	send_stderr        send_stderr
 }
 
 // New_journal makes a Journal.
@@ -114,7 +121,7 @@ func New_journal() *Journal {
 // The allowable interface{} values are string and []byte
 func New_journal_m(default_fields map[string]interface{}) *Journal {
 
-	j := &Journal{add_go_code_fields: true, send_stderr: default_send_stderr}
+	j := &Journal{add_go_code_fields: true}
 	j.Set_default_fields(default_fields)
 	return j
 }
@@ -356,7 +363,12 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 		}
 		i++
 	}
-	if j.send_stderr {
+	switch {
+	case j.send_stderr != Sd_send_stderr_allow_override:
+		if j.send_stderr == Sd_send_stderr_true {
+			fmt.Fprintf(os.Stderr, "%v", fields[sd_message])
+		}
+	case default_send_stderr == Sd_send_stderr_true:
 		fmt.Fprintf(os.Stderr, "%v", fields[sd_message])
 	}
 	n, _ := C.sd_journal_sendv(&iov[0], C.int(len(iov)))
@@ -375,10 +387,11 @@ func (j *Journal) Set_add_go_code_fields(use bool) {
 	j.add_go_code_fields = use
 }
 
-// Set_send_stderr will send message to os.Stderr in addition to the systemd journal.
-//
-// Default: see Set_default_send_stderr()
-func (j *Journal) Set_send_stderr(use bool) {
+// Set_send_stderr to Sd_send_stderr_true to send a message to os.Stderr in addition to the systemd journal.
+// Set_send_stderr to Sd_send_stderr_false to prevent sending to os.Stderr.
+// This will override Set_default_stderr_override()
+// Default: Sd_send_stderr_override; i.e. allow Set_default_stderr_override() the first choice.
+func (j *Journal) Set_send_stderr(use send_stderr) {
 
 	j.send_stderr = use
 }
@@ -387,7 +400,7 @@ func (j *Journal) Set_send_stderr(use bool) {
 // Generate an application UUID with journalctl --new-id128.
 // See man journalctl.
 //
-// uuid is unset with "" 
+// uuid is unset with ""
 func Set_message_id(uuid string) {
 
 	if uuid == "" {
@@ -397,12 +410,11 @@ func Set_message_id(uuid string) {
 	}
 }
 
-// Set_default_send_stderr will change the default for newly created Journal struct 
+// Set_default_send_stderr to Sd_send_stderr_true to send a message to os.Stderr in addition to the journal.
+// Can be overridden if Journal.Set_send_stderr(Sd_send_stderr_true) is called.
 //
-// See Set_send_stderr() to change a existing Journal struct
-//
-// Default: false
-func Set_default_send_stderr(use bool) {
+// Default: Sd_send_stderr_override; i.e. will not send to stderr
+func Set_default_send_stderr(use send_stderr) {
 
 	default_send_stderr = use
 }
