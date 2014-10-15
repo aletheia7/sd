@@ -42,6 +42,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"unsafe"
 	// See github.com:aletheia7/gstack
@@ -310,6 +311,99 @@ func (j *Journal) Info_m_f(fields map[string]interface{}, format string, a ...in
 func (j *Journal) Debug_m_f(fields map[string]interface{}, format string, a ...interface{}) error {
 
 	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), log_debug)}...))
+}
+
+func (j *Journal) a_to_map(fields []string) map[string]interface{} {
+
+	ret := make(map[string]interface{}, len(fields))
+	for _, s := range fields {
+		f := strings.SplitN(s, "=", 2)
+		if len(f) == 2 {
+			ret[f[0]] = f[1]
+		}
+	}
+	return ret
+}
+
+// Alert_a sends a message with LOG_ALERT priority (syslog severity).
+//
+// fields: your user-defined systemd.journal-fields.
+//
+// a ...interface{}: fmt.Println formating will become MESSAGE; see man systemd.journal-fields.
+func (j *Journal) Alert_a(fields []string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_alert)}...))
+}
+
+func (j *Journal) Crit_a(fields []string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_crit)}...))
+}
+
+func (j *Journal) Err_a(fields []string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_err)}...))
+}
+
+func (j *Journal) Warning_a(fields []string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_warning)}...))
+}
+
+func (j *Journal) Notice_a(fields []string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_notice)}...))
+}
+
+func (j *Journal) Info_a(fields []string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_info)}...))
+}
+
+func (j *Journal) Debug_a(fields []string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_debug)}...))
+}
+
+// Alert_a_f sends a message with LOG_ALERT priority (syslog severity).
+// The message is formed via fmt.Printf style arguments
+//
+// fields: your user-defined systemd.journal-fields.
+//
+// format string, a ...interface{}: see fmt.Printf.
+func (j *Journal) Alert_a_f(fields []string, format string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_alert)}...))
+}
+
+func (j *Journal) Crit_a_f(fields []string, format string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_crit)}...))
+}
+
+func (j *Journal) Err_a_f(fields []string, format string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_err)}...))
+}
+
+func (j *Journal) Warning_a_f(fields []string, format string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_warning)}...))
+}
+
+func (j *Journal) Notice_a_f(fields []string, format string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_notice)}...))
+}
+
+func (j *Journal) Info_a_f(fields []string, format string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_info)}...))
+}
+
+func (j *Journal) Debug_a_f(fields []string, format string, a ...interface{}) error {
+
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_debug)}...))
 }
 
 // Send writes to the systemd-journal. The keys must be uppercase strings without a
