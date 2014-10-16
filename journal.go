@@ -20,10 +20,21 @@
 // New_journal() and New_journal_m() create a Journal struct.
 // Journal.Emerg(), Journal.Alert(), Journal.Crit(), Journal.Err(), Journal.Warning(),
 // Journal.Notice(), Journal.Info(), Journal.Debug() write to the
-// systemd journal. Each method contains a *_m (map variation) method that allows
-// sending your own fields. The map suppports string and []byte (binary). Each method
-// also contains a _m_f (map & format variation) method that supports fmt.Printf style
-// arguments. Each of the methods will add journal fields GO_FILE, GO_LINE, and GO_FUNC
+// systemd journal.
+//
+// Each method contains a *_m (map variation) method that allows
+// sending your own fields. The map suppports string and []byte (binary).
+// Each method
+// also contains a _m_f (map & format variation) method that supports http://godoc.org/fmt#Printf style
+// arguments.
+//
+// Each method contains a *_a (array variation) method that allows
+// sending your own fields as []string{"FIELD1=v1", "FIELD2=v2"}.
+// Each method
+// also contains a _a_f (array & format variation) method that supports http://godoc.org/fmt#Printf style
+// arguments.
+//
+// Each of the methods will add journal fields GO_FILE, GO_LINE, and GO_FUNC
 // fields to the journal to indicate where the methods were called. The *_m_f methods
 // can take nil map in order to only use the format functionality.
 package sd
