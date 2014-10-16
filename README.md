@@ -33,8 +33,10 @@ Each of the methods will add journal fields GO_FILE, GO_LINE, and GO_FUNC fields
 + You may need to increase RateLimitInterval and/or RateLimitBurst settings in
 journald.conf when sending large amounts of data to the journal. Data will
 not appear in the log when settings are too low. 
-+ This package is gorouttine safe, however problems have occurred when 
+
++ This package is goroutine safe, however problems have occurred when 
 [runtime.GOMAXPROCS](http://godoc.org/runtime#GOMAXPROCS) is used.
+
 #### Example
 
 ```go
