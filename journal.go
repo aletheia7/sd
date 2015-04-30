@@ -65,25 +65,26 @@ func init() {
 	valid_field, _ = regexp.Compile(Sd_valid_field_regexp)
 }
 
-type priority string
+type Priority string
 
 // These are os/syslog.Priority values
 var (
-	log_emerg           priority = priority(strconv.FormatInt(int64(syslog.LOG_EMERG), 10))
-	log_alert           priority = priority(strconv.FormatInt(int64(syslog.LOG_ALERT), 10))
-	log_crit            priority = priority(strconv.FormatInt(int64(syslog.LOG_CRIT), 10))
-	log_err             priority = priority(strconv.FormatInt(int64(syslog.LOG_ERR), 10))
-	log_warning         priority = priority(strconv.FormatInt(int64(syslog.LOG_WARNING), 10))
-	log_notice          priority = priority(strconv.FormatInt(int64(syslog.LOG_NOTICE), 10))
-	log_info            priority = priority(strconv.FormatInt(int64(syslog.LOG_INFO), 10))
-	log_debug           priority = priority(strconv.FormatInt(int64(syslog.LOG_DEBUG), 10))
-	message_priority             = map[string]interface{}{sd_message: ``, sd_priority: ``}
-	valid_field         *regexp.Regexp
-	max_fields          uint64
-	id128               map[string]interface{}
-	sd_field_name_sep_b             = []byte{61}
-	sd_field_name_sep_s             = string(sd_field_name_sep_b)
-	default_send_stderr send_stderr = Sd_send_stderr_allow_override
+	Log_emerg                  Priority = Priority(strconv.FormatInt(int64(syslog.LOG_EMERG), 10))
+	Log_alert                  Priority = Priority(strconv.FormatInt(int64(syslog.LOG_ALERT), 10))
+	Log_crit                   Priority = Priority(strconv.FormatInt(int64(syslog.LOG_CRIT), 10))
+	Log_err                    Priority = Priority(strconv.FormatInt(int64(syslog.LOG_ERR), 10))
+	Log_warning                Priority = Priority(strconv.FormatInt(int64(syslog.LOG_WARNING), 10))
+	Log_notice                 Priority = Priority(strconv.FormatInt(int64(syslog.LOG_NOTICE), 10))
+	Log_info                   Priority = Priority(strconv.FormatInt(int64(syslog.LOG_INFO), 10))
+	Log_debug                  Priority = Priority(strconv.FormatInt(int64(syslog.LOG_DEBUG), 10))
+	message_priority                    = map[string]interface{}{sd_message: ``, sd_priority: ``}
+	valid_field                *regexp.Regexp
+	max_fields                 uint64
+	id128                      map[string]interface{}
+	sd_field_name_sep_b                    = []byte{61}
+	sd_field_name_sep_s                    = string(sd_field_name_sep_b)
+	default_send_stderr        send_stderr = Sd_send_stderr_allow_override
+	default_remove_ansi_escape             = false
 )
 
 //
@@ -120,6 +121,9 @@ type Journal struct {
 	lock               sync.Mutex
 	add_go_code_fields bool
 	send_stderr        send_stderr
+	remove_ansi_escape bool
+	writer_priority    Priority
+	*regexp.Regexp
 }
 
 // New_journal makes a Journal.
@@ -133,7 +137,12 @@ func New_journal() *Journal {
 // The allowable interface{} values are string and []byte
 func New_journal_m(default_fields map[string]interface{}) *Journal {
 
-	j := &Journal{add_go_code_fields: true}
+	j := &Journal{
+		add_go_code_fields: true,
+		remove_ansi_escape: default_remove_ansi_escape,
+		writer_priority:    Log_info,
+	}
+	j.Regexp = regexp.MustCompile(`\x1b[^m]*m`)
 	j.Set_default_fields(default_fields)
 	return j
 }
@@ -166,7 +175,7 @@ func (j *Journal) copy(maps ...map[string]interface{}) map[string]interface{} {
 }
 
 // Default fields are sent with every Send().
-// Do not include MESSAGE, or PRIORITY, as these fields are always sent.
+// Do not include MESSAGE, or Priority, as these fields are always sent.
 //
 // The allowable interface{} values are string and []byte
 func (j *Journal) Set_default_fields(fields map[string]interface{}) {
@@ -174,13 +183,18 @@ func (j *Journal) Set_default_fields(fields map[string]interface{}) {
 	j.default_fields = j.copy([]map[string]interface{}{fields, message_priority, id128}...)
 }
 
-func (j *Journal) load_defaults(message string, priority priority) map[string]interface{} {
+func (j *Journal) load_defaults(message string, Priority Priority) map[string]interface{} {
 
 	j.lock.Lock()
 	defer j.lock.Unlock()
 
-	j.default_fields[sd_message] = message
-	j.default_fields[sd_priority] = priority
+	switch j.remove_ansi_escape {
+	case true:
+		j.default_fields[sd_message] = j.Regexp.ReplaceAllLiteralString(message, ``)
+	case false:
+		j.default_fields[sd_message] = message
+	}
+	j.default_fields[sd_priority] = Priority
 
 	if id128 == nil {
 		delete(j.default_fields, sd_message_id)
@@ -192,98 +206,125 @@ func (j *Journal) load_defaults(message string, priority priority) map[string]in
 
 func (j *Journal) Emerg(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_emerg))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), Log_emerg))
 }
 
-// Alert sends a message with LOG_ALERT priority (syslog severity).
+// Set_remove_ansi_escape determines if ANSI escape sequences are removed.
+//
+// Default: false
+func (j *Journal) Set_remove_ansi_escape(remove bool) {
+	j.remove_ansi_escape = remove
+}
+
+// Set_writer_priority set the priority for the write() receiver.
+//
+// You'll probably want to use Set_remove_ansi(true).
+//
+// Default: Log_info
+func (j *Journal) Set_writer_priority(p Priority) {
+	j.writer_priority = p
+}
+
+// Writer implements io.Writer.
+//
+// Allows Jhournal to be used in the log package.
+//
+// You might want to use Set_remove_ansi(true).
+//
+// See http://godoc.org/log#SetOutput
+func (j *Journal) Write(b []byte) (int, error) {
+	return len(b), j.Send(j.load_defaults(string(b), j.writer_priority))
+}
+
+// Alert sends a message with Log_alert Priority (syslog severity).
 //
 // a ...interface{}: fmt.Println formating will become MESSAGE; see man systemd.journal-fields.
 func (j *Journal) Alert(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_alert))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), Log_alert))
 }
 
 func (j *Journal) Crit(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_crit))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), Log_crit))
 }
 
 func (j *Journal) Err(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_err))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), Log_err))
 }
 
 func (j *Journal) Warning(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_warning))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), Log_warning))
 }
 
 func (j *Journal) Notice(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_notice))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), Log_notice))
 }
 
 func (j *Journal) Info(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_info))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), Log_info))
 }
 
 func (j *Journal) Debug(a ...interface{}) error {
 
-	return j.Send(j.load_defaults(fmt.Sprintln(a...), log_debug))
+	return j.Send(j.load_defaults(fmt.Sprintln(a...), Log_debug))
 }
 
 func (j *Journal) Emerg_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_emerg)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), Log_emerg)}...))
 }
 
-// Alert_m sends a message with LOG_ALERT priority (syslog severity).
+// Alert_m sends a message with Log_alert Priority (syslog severity).
 //
 // fields: your user-defined systemd.journal-fields.
 //
 // a ...interface{}: fmt.Println formating will become MESSAGE; see man systemd.journal-fields.
 func (j *Journal) Alert_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_alert)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), Log_alert)}...))
 }
 
 func (j *Journal) Crit_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_crit)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), Log_crit)}...))
 }
 
 func (j *Journal) Err_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_err)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), Log_err)}...))
 }
 
 func (j *Journal) Warning_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_warning)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), Log_warning)}...))
 }
 
 func (j *Journal) Notice_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_notice)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), Log_notice)}...))
 }
 
 func (j *Journal) Info_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_info)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), Log_info)}...))
 }
 
 func (j *Journal) Debug_m(fields map[string]interface{}, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), log_debug)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintln(a...), Log_debug)}...))
 }
 
 func (j *Journal) Emerg_m_f(fields map[string]interface{}, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), log_emerg)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), Log_emerg)}...))
 }
 
-// Alert_m_f sends a message with LOG_ALERT priority (syslog severity).
+// Alert_m_f sends a message with Log_alert Priority (syslog severity).
 // The message is formed via fmt.Printf style arguments
 //
 // fields: your user-defined systemd.journal-fields.
@@ -291,37 +332,37 @@ func (j *Journal) Emerg_m_f(fields map[string]interface{}, format string, a ...i
 // format string, a ...interface{}: see fmt.Printf.
 func (j *Journal) Alert_m_f(fields map[string]interface{}, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), log_alert)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), Log_alert)}...))
 }
 
 func (j *Journal) Crit_m_f(fields map[string]interface{}, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), log_crit)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), Log_crit)}...))
 }
 
 func (j *Journal) Err_m_f(fields map[string]interface{}, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), log_err)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), Log_err)}...))
 }
 
 func (j *Journal) Warning_m_f(fields map[string]interface{}, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), log_warning)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), Log_warning)}...))
 }
 
 func (j *Journal) Notice_m_f(fields map[string]interface{}, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), log_notice)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), Log_notice)}...))
 }
 
 func (j *Journal) Info_m_f(fields map[string]interface{}, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), log_info)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), Log_info)}...))
 }
 
 func (j *Journal) Debug_m_f(fields map[string]interface{}, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), log_debug)}...))
+	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), Log_debug)}...))
 }
 
 func (j *Journal) a_to_map(fields []string) map[string]interface{} {
@@ -336,47 +377,47 @@ func (j *Journal) a_to_map(fields []string) map[string]interface{} {
 	return ret
 }
 
-// Alert_a sends a message with LOG_ALERT priority (syslog severity).
+// Alert_a sends a message with Log_alert Priority (syslog severity).
 //
 // fields: your user-defined systemd.journal-fields.
 //
 // a ...interface{}: fmt.Println formating will become MESSAGE; see man systemd.journal-fields.
 func (j *Journal) Alert_a(fields []string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_alert)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), Log_alert)}...))
 }
 
 func (j *Journal) Crit_a(fields []string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_crit)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), Log_crit)}...))
 }
 
 func (j *Journal) Err_a(fields []string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_err)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), Log_err)}...))
 }
 
 func (j *Journal) Warning_a(fields []string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_warning)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), Log_warning)}...))
 }
 
 func (j *Journal) Notice_a(fields []string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_notice)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), Log_notice)}...))
 }
 
 func (j *Journal) Info_a(fields []string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_info)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), Log_info)}...))
 }
 
 func (j *Journal) Debug_a(fields []string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), log_debug)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintln(a...), Log_debug)}...))
 }
 
-// Alert_a_f sends a message with LOG_ALERT priority (syslog severity).
+// Alert_a_f sends a message with Log_alert Priority (syslog severity).
 // The message is formed via fmt.Printf style arguments
 //
 // fields: your user-defined systemd.journal-fields.
@@ -384,37 +425,37 @@ func (j *Journal) Debug_a(fields []string, a ...interface{}) error {
 // format string, a ...interface{}: see fmt.Printf.
 func (j *Journal) Alert_a_f(fields []string, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_alert)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), Log_alert)}...))
 }
 
 func (j *Journal) Crit_a_f(fields []string, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_crit)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), Log_crit)}...))
 }
 
 func (j *Journal) Err_a_f(fields []string, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_err)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), Log_err)}...))
 }
 
 func (j *Journal) Warning_a_f(fields []string, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_warning)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), Log_warning)}...))
 }
 
 func (j *Journal) Notice_a_f(fields []string, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_notice)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), Log_notice)}...))
 }
 
 func (j *Journal) Info_a_f(fields []string, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_info)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), Log_info)}...))
 }
 
 func (j *Journal) Debug_a_f(fields []string, format string, a ...interface{}) error {
 
-	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), log_debug)}...))
+	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), Log_debug)}...))
 }
 
 // Send writes to the systemd-journal. The keys must be uppercase strings without a
@@ -454,7 +495,7 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 			cs_strings[i] = unsafe.Pointer(C.CString(s))
 			iov[i].iov_base = cs_strings[i]
 			iov[i].iov_len = C.size_t(len(s))
-		case priority:
+		case Priority:
 			s = k + sd_field_name_sep_s + string(t)
 			cs_strings[i] = unsafe.Pointer(C.CString(s))
 			iov[i].iov_base = cs_strings[i]
@@ -522,4 +563,11 @@ func Set_message_id(uuid string) {
 func Set_default_send_stderr(use send_stderr) {
 
 	default_send_stderr = use
+}
+
+// Set default_remove_ansi_escape will set the default value for new Journal.
+//
+// Default: remove = false
+func Set_default_remove_ansi_escape(remove bool) {
+	default_remove_ansi_escape = remove
 }

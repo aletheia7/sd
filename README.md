@@ -42,6 +42,8 @@ not appear in the log when settings are too low.
 ```go
 package main
 import (
+	"io"
+	"log"
 	"sd"
 )
 
@@ -59,6 +61,21 @@ func main() {
 	j.Alert_m(m, "Alert_m exmaple")
 
 	j.Alert_m_f(m, "Alert_m_f example: Salary: %v, Year: %v", 0.00, 2014)
+
+	// Use log package
+	// systemd will convert messages to binary with ANSI escapes sequences
+	sd.Set_default_remove_ansi_escape(true)
+	j := sd.New_journal()
+	// systemd will output red text
+	j.Set_writer_priority(sd.Log_err)
+	// Hello World
+	// Hello is green
+	// World is yellow
+	s := "\x1b[32mHello\x1b[0m \x1b[93mWorld\x1b[0m"
+	log.SetFlags(0)
+	// Send to stderr and systemd-journald
+	log.SetOutput(io.MultiWriter(os.Stderr, j))
+	log.Println(s)
 }
 ```
 ##### Ouput
