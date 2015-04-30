@@ -63,6 +63,7 @@ func main() {
 	j.Alert_m_f(m, "Alert_m_f example: Salary: %v, Year: %v", 0.00, 2014)
 
 	// Use log package
+	// Remove ANSI escape sequences
 	// systemd will convert messages to binary with ANSI escapes sequences
 	sd.Set_default_remove_ansi_escape(true)
 	j := sd.New_journal()
