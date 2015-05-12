@@ -123,7 +123,7 @@ type Journal struct {
 	send_stderr        send_stderr
 	remove_ansi_escape bool
 	writer_priority    Priority
-	*regexp.Regexp
+	remove_re2         *regexp.Regexp
 }
 
 // New_journal makes a Journal.
@@ -142,7 +142,7 @@ func New_journal_m(default_fields map[string]interface{}) *Journal {
 		remove_ansi_escape: default_remove_ansi_escape,
 		writer_priority:    Log_info,
 	}
-	j.Regexp = regexp.MustCompile(`\x1b[^m]*m`)
+	j.remove_re2 = regexp.MustCompile(`\x1b[^m]*m`)
 	j.Set_default_fields(default_fields)
 	return j
 }
@@ -190,7 +190,7 @@ func (j *Journal) load_defaults(message string, Priority Priority) map[string]in
 
 	switch j.remove_ansi_escape {
 	case true:
-		j.default_fields[sd_message] = j.Regexp.ReplaceAllLiteralString(message, ``)
+		j.default_fields[sd_message] = j.remove_re2.ReplaceAllLiteralString(message, ``)
 	case false:
 		j.default_fields[sd_message] = message
 	}
