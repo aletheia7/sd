@@ -39,7 +39,7 @@
 // can take nil map in order to only use the format functionality.
 package sd
 
-// #cgo pkg-config: --cflags --libs libsystemd-journal
+// #cgo pkg-config: --cflags --libs libsystemd
 // #include <stdlib.h>
 // #include <systemd/sd-journal.h>
 // #include <unistd.h>
@@ -159,6 +159,10 @@ func (j *Journal) copy(maps ...map[string]interface{}) map[string]interface{} {
 		if m != nil {
 			for k, v := range m {
 				switch t := v.(type) {
+				case Priority:
+					if 0 < len(string(t)) {
+						dest[k] = v
+					}
 				case string:
 					if 0 < len(string(t)) {
 						dest[k] = v

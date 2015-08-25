@@ -7,7 +7,15 @@ go get github.com/aletheia7/sd
 cd <sd location>
 go test -v
 ```
-
+systemd merged library libsystemd-journal into libsystemd. If you have
+libsystemd-journal installed, change the following line:
+``
+// #cgo pkg-config: --cflags --libs libsystemd
+``
+to
+``
+// #cgo pkg-config: --cflags --libs libsystemd-journal
+`` 
 #### Documentation
 [godoc sd](http://godoc.org/github.com/aletheia7/sd) 
 
