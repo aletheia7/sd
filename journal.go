@@ -369,6 +369,38 @@ func (j *Journal) Debug_m_f(fields map[string]interface{}, format string, a ...i
 	return j.Send(j.copy([]map[string]interface{}{fields, j.load_defaults(fmt.Sprintf(format, a...), Log_debug)}...))
 }
 
+// Alertf sends a message with Log_alert Priority (syslog severity).
+// The message is formed via fmt.Printf style arguments
+//
+// format string, a ...interface{}: see fmt.Printf.
+func (j *Journal) Alertf(format string, a ...interface{}) error {
+	return j.Send(j.load_defaults(fmt.Sprintf(format, a...), Log_alert))
+}
+
+func (j *Journal) Critf(format string, a ...interface{}) error {
+	return j.Send(j.load_defaults(fmt.Sprintf(format, a...), Log_crit))
+}
+
+func (j *Journal) Errf(format string, a ...interface{}) error {
+	return j.Send(j.load_defaults(fmt.Sprintf(format, a...), Log_err))
+}
+
+func (j *Journal) Warningf(format string, a ...interface{}) error {
+	return j.Send(j.load_defaults(fmt.Sprintf(format, a...), Log_warning))
+}
+
+func (j *Journal) Noticef(format string, a ...interface{}) error {
+	return j.Send(j.load_defaults(fmt.Sprintf(format, a...), Log_notice))
+}
+
+func (j *Journal) Infof(format string, a ...interface{}) error {
+	return j.Send(j.load_defaults(fmt.Sprintf(format, a...), Log_info))
+}
+
+func (j *Journal) Debugf(format string, a ...interface{}) error {
+	return j.Send(j.load_defaults(fmt.Sprintf(format, a...), Log_debug))
+}
+
 func (j *Journal) a_to_map(fields []string) map[string]interface{} {
 
 	ret := make(map[string]interface{}, len(fields))
