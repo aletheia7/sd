@@ -16,8 +16,9 @@ to
 ``
 // #cgo pkg-config: --cflags --libs libsystemd-journal
 `` 
+
 #### Documentation
-[![godoc](https://github.com/aletheia7/sd/godoc-reference-blue.svg)](https://godoc.org/github.com/aletheia7/sd) 
+[![](https://img.shields.io/badge/godoc-reference-blue.svg)](https://godoc.org/github.com/aletheia7/sd) 
 
 New_journal() and New_journal_m() create a Journal struct. Journal.Emerg(), 
 Journal.Alert(), Journal.Crit(), Journal.Err(), Journal.Warning(),
