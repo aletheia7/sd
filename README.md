@@ -1,4 +1,4 @@
-[godoc sd](http://godoc.org/github.com/aletheia7/sd) 
+[![](https://img.shields.io/badge/godoc-reference-blue.svg)](https://godoc.org/github.com/aletheia7/sd) 
 
 #### Install 
 ```bash
