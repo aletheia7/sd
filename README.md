@@ -15,6 +15,7 @@ to
 ``
 // #cgo pkg-config: --cflags --libs libsystemd-journal
 `` 
+
 #### Documentation
 
 New_journal() and New_journal_m() create a Journal struct. Journal.Emerg(), 
