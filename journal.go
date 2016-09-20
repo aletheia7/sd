@@ -1,19 +1,6 @@
-// Copyright 2014 aletheia7.
-//
-// This file is part of sd.
-//
-// sd is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// sd is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with sd.  If not, see <http://www.gnu.org/licenses/>.
+// Copyright 2016 aletheia7. All rights reserved.
+// Use of this source code is governed by a BSD-2-Clause
+// license that can be found in the LICENSE file.
 
 // Package sd provides methods to write to the systemd-journal.
 //
@@ -499,8 +486,10 @@ func (j *Journal) Debug_a_f(fields []string, format string, a ...interface{}) er
 // etc.
 //
 // A MESSAGE key in field is the only required field.
-func (j *Journal) Send(fields map[string]interface{}) error {
 
+type f struct{}
+
+func (j *Journal) Send(fields map[string]interface{}) error {
 	if max_fields < uint64(len(fields)) {
 		return errors.New(fmt.Sprintf("Field count cannot exceed %v: %v given", max_fields, len(fields)))
 	}
@@ -511,14 +500,12 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 		fields[sd_go_line] = st.Line_s()
 	}
 	iov := make([]C.struct_iovec, len(fields))
-	cs_strings := make([]unsafe.Pointer, len(fields))
+	i := 0
 	defer func() {
-		for _, v := range cs_strings {
-			C.free(unsafe.Pointer(v))
+		for j := 0; j < i; j++ {
+			C.free(unsafe.Pointer(iov[j].iov_base))
 		}
 	}()
-
-	i := 0
 	var s string
 	var b []byte
 	for k, v := range fields {
@@ -528,17 +515,15 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 		switch t := v.(type) {
 		case string:
 			s = k + sd_field_name_sep_s + t
-			cs_strings[i] = unsafe.Pointer(C.CString(s))
-			iov[i].iov_base = cs_strings[i]
+			iov[i].iov_base = unsafe.Pointer(C.CString(s))
 			iov[i].iov_len = C.size_t(len(s))
 		case Priority:
 			s = k + sd_field_name_sep_s + string(t)
-			cs_strings[i] = unsafe.Pointer(C.CString(s))
-			iov[i].iov_base = cs_strings[i]
+			iov[i].iov_base = unsafe.Pointer(C.CString(s))
 			iov[i].iov_len = C.size_t(len(s))
 		case []byte:
 			b = bytes.Join([][]byte{[]byte(k), t}, sd_field_name_sep_b)
-			iov[i].iov_base = unsafe.Pointer(&b[0])
+			iov[i].iov_base = C.CBytes(b)
 			iov[i].iov_len = C.size_t(len(b))
 		default:
 			return fmt.Errorf("Error: Unsupported field value: key = %v", k)

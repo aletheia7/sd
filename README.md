@@ -1,5 +1,4 @@
-#### sd 
-Go package that provides methods to write to the systemd journal
+[godoc sd](http://godoc.org/github.com/aletheia7/sd) 
 
 #### Install 
 ```bash
@@ -17,7 +16,6 @@ to
 // #cgo pkg-config: --cflags --libs libsystemd-journal
 `` 
 #### Documentation
-[godoc sd](http://godoc.org/github.com/aletheia7/sd) 
 
 New_journal() and New_journal_m() create a Journal struct. Journal.Emerg(), 
 Journal.Alert(), Journal.Crit(), Journal.Err(), Journal.Warning(),
@@ -93,4 +91,9 @@ func main() {
 journal -f --output verbose
 ```
 
-![LGPL](http://www.gnu.org/graphics/lgplv3-147x51.png)
+#### License 
+
+Use of this source code is governed by a BSD-2-Clause license that can be found
+in the LICENSE file.
+
+[![BSD-2-Clause License](osi_standard_logo.png)](https://opensource.org/)
