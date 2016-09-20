@@ -1,37 +1,24 @@
-// Copyright 2014 aletheia7.
-//
-// This file is part of gstack.
-//
-// gstack is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// gstack is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with gstack.  If not, see <http://www.gnu.org/licenses/>.
+// Copyright 2016 aletheia7. All rights reserved.
+// Use of this source code is governed by a BSD-2-Clause
+// license that can be found in the LICENSE file.
 
 // Package gstack provides methods to easily obtain the function name, file path, and line number of go code.
 //
 // gstack answers the questions: What function am I in? What is the full path
 // to the file? What is the line number?
-package gstack 
+package gstack
+
 import (
+	"fmt"
 	"runtime"
 	"strconv"
-	"fmt"
 )
 
 type Stack struct {
-
-	index		int
-	func_name	string
-	file_name	string
-	line		int
+	index     int
+	func_name string
+	file_name string
+	line      int
 }
 
 // New() returns a Stack based on the immediate function scope.
@@ -44,7 +31,7 @@ func New() *Stack {
 // New_index returns a Stack.
 //
 // When index = 2, Stack is the parent function caller scope; i.e. the function that
-// called gstack.New() 
+// called gstack.New()
 //
 // When index = 3, Stack is the next level up.
 func New_index(index int) *Stack {
@@ -54,7 +41,7 @@ func New_index(index int) *Stack {
 func get_stack(index int) *Stack {
 
 	if pc, _, _, ok := runtime.Caller(index); ok {
-		pc = pc - 1	
+		pc = pc - 1
 		f := runtime.FuncForPC(pc)
 		name := f.Name()
 		file, line := f.FileLine(pc)

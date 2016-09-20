@@ -1,27 +1,14 @@
-// Copyright 2014 aletheia7.
-//
-// This file is part of gstack.
-//
-// gstack is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// gstack is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with gstack.  If not, see <http://www.gnu.org/licenses/>.
+// Copyright 2016 aletheia7. All rights reserved.
+// Use of this source code is governed by a BSD-2-Clause
+// license that can be found in the LICENSE file.
 
 // Package gstack_test
 package gstack_test
 
 import (
-	"testing"
 	"fmt"
 	. "gstack"
+	"testing"
 )
 
 func Test_All(t *testing.T) {
@@ -41,9 +28,9 @@ func Test_All(t *testing.T) {
 
 func Example() {
 
-	stack1 := New()			// Index: 2
+	stack1 := New() // Index: 2
 	fmt.Println(stack1)
-	stack2 := New_index(3)	// Index: 3 
+	stack2 := New_index(3) // Index: 3
 	fmt.Println(stack2)
 
 	// Index: 2, Function: gstack_test.Example, File: /<ommitted path ...>/go/src/gstack/gstack_test.go, Line: 27

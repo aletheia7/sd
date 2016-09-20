@@ -39,12 +39,11 @@ import (
 	"log/syslog"
 	"os"
 	"regexp"
+	"sd/gstack"
 	"strconv"
 	"strings"
 	"sync"
 	"unsafe"
-	// See github.com:aletheia7/gstack
-	"sd/gstack"
 )
 
 func init() {
