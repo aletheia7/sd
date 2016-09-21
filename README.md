@@ -41,8 +41,8 @@ Each of the methods will add journal fields GO_FILE, GO_LINE, and GO_FUNC fields
 journald.conf when sending large amounts of data to the journal. Data will
 not appear in the log when settings are too low. 
 
-+ This package is goroutine safe, however problems have occurred when 
-[runtime.GOMAXPROCS](http://godoc.org/runtime#GOMAXPROCS) is used.
+* journalctl will truncate output by default. journalctl uses `less` as it's pager and sets it's own defaults via SYSTEMD_LESS.  To restore the output, set the SYSTEMD_LESS 
+environment variable; i.e. `export SYSTEMD_LESS=FRXMK`. See `man journalctl`.
 
 #### Example
 
