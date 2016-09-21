@@ -39,7 +39,7 @@ import (
 	"log/syslog"
 	"os"
 	"regexp"
-	"sd/gstack"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -493,7 +493,7 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 		return errors.New(fmt.Sprintf("Field count cannot exceed %v: %v given", max_fields, len(fields)))
 	}
 	if j.add_go_code_fields {
-		st := gstack.New_index(4)
+		st := new_index(4)
 		fields[sd_go_func] = st.Func()
 		fields[sd_go_file] = st.File()
 		fields[sd_go_line] = st.Line_s()
@@ -590,4 +590,65 @@ func Set_default_send_stderr(use send_stderr) {
 // Default: remove = false
 func Set_default_remove_ansi_escape(remove bool) {
 	default_remove_ansi_escape = remove
+}
+
+type stack struct {
+	index     int
+	func_name string
+	file_name string
+	line      int
+}
+
+// New() returns a Stack based on the immediate function scope.
+//
+// Implicit index = 2. Index = 1 is not very useful. It will be New().
+func new() *stack {
+	return get_stack(2)
+}
+
+// New_index returns a Stack.
+//
+// When index = 2, Stack is the parent function caller scope; i.e. the function that
+// called gstack.New()
+//
+// When index = 3, Stack is the next level up.
+func new_index(index int) *stack {
+	return get_stack(index)
+}
+
+func get_stack(index int) *stack {
+
+	if pc, _, _, ok := runtime.Caller(index); ok {
+		pc = pc - 1
+		f := runtime.FuncForPC(pc)
+		name := f.Name()
+		file, line := f.FileLine(pc)
+		return &stack{index: index, func_name: name, file_name: file, line: line}
+	}
+	return &stack{index: index}
+}
+
+// Return the function name of the function call.
+func (s *stack) Func() string {
+	return s.func_name
+}
+
+// Return the file name of the function call.
+func (s *stack) File() string {
+	return s.file_name
+}
+
+// Return the line number of the function call.
+func (s *stack) Line() int {
+	return s.line
+}
+
+// Return the line number of the function call as a string
+func (s *stack) Line_s() string {
+	return strconv.FormatInt(int64(s.line), 10)
+}
+
+// Stringer Interface
+func (s *stack) String() string {
+	return fmt.Sprintf("Index: %d, Function: %s, File: %s, Line: %d", s.index, s.func_name, s.file_name, s.line)
 }
