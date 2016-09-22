@@ -489,6 +489,8 @@ func (j *Journal) Debug_a_f(fields []string, format string, a ...interface{}) er
 type f struct{}
 
 func (j *Journal) Send(fields map[string]interface{}) error {
+	j.lock.Lock()
+	defer j.lock.Unlock()
 	if max_fields < uint64(len(fields)) {
 		return errors.New(fmt.Sprintf("Field count cannot exceed %v: %v given", max_fields, len(fields)))
 	}
