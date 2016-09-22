@@ -497,8 +497,7 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 	if j.add_go_code_fields {
 		st := new_index(4)
 		fields[sd_go_func] = st.Func()
-		fields[sd_go_file] = st.File()
-		fields[sd_go_line] = st.Line_s()
+		fields[sd_go_file] = st.File() + `:` + st.Line_s()
 	}
 	iov := make([]C.struct_iovec, len(fields))
 	i := 0
