@@ -8,13 +8,14 @@ go test -v
 ```
 Older systemd versions used libsystemd-journal. Change the following line if
 you have libsystemd-journal:
-``
+
+```go
 // #cgo pkg-config: --cflags --libs libsystemd
-``
+```
 to
-``
+```go
 // #cgo pkg-config: --cflags --libs libsystemd-journal
-`` 
+``` 
 
 #### Documentation
 
