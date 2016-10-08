@@ -26,38 +26,44 @@ the journal to indicate where the methods were called. The *_m_f methods
 can take nil map in order to only use the format functionality.
 */
 
-// +build linux,cgo
-
 package sd
 
 import (
 	"fmt"
+	"log/syslog"
 	"regexp"
-	"sd/c"
+	"strconv"
 	"strings"
 	"sync"
 )
 
-type Send_stderr c.Send_stderr
-
 const (
-	Sd_send_stderr_allow_override = Send_stderr(c.Sd_send_stderr_allow_override)
-	Sd_send_stderr_true           = Send_stderr(c.Sd_send_stderr_true)
-	Sd_send_stderr_false          = Send_stderr(c.Sd_send_stderr_false)
+	Sd_message            = "MESSAGE"
+	sd_valid_field_regexp = `^[^_]{1}[\p{Lu}0-9_]*$`
+	sd_go_func            = "GO_FUNC"
+	sd_go_file            = "GO_FILE"
 )
 
-type Priority c.Priority
+type Priority string
 
 // These are log/syslog.Priority values.
 var (
-	Log_emerg   = Priority(c.Log_emerg)
-	Log_alert   = Priority(c.Log_alert)
-	Log_crit    = Priority(c.Log_crit)
-	Log_err     = Priority(c.Log_err)
-	Log_warning = Priority(c.Log_warning)
-	Log_notice  = Priority(c.Log_notice)
-	Log_info    = Priority(c.Log_info)
-	Log_debug   = Priority(c.Log_debug)
+	Log_emerg   = Priority(strconv.Itoa(int(syslog.LOG_EMERG)))
+	Log_alert   = Priority(strconv.Itoa(int(syslog.LOG_ALERT)))
+	Log_crit    = Priority(strconv.Itoa(int(syslog.LOG_CRIT)))
+	Log_err     = Priority(strconv.Itoa(int(syslog.LOG_ERR)))
+	Log_warning = Priority(strconv.Itoa(int(syslog.LOG_WARNING)))
+	Log_notice  = Priority(strconv.Itoa(int(syslog.LOG_NOTICE)))
+	Log_info    = Priority(strconv.Itoa(int(syslog.LOG_INFO)))
+	Log_debug   = Priority(strconv.Itoa(int(syslog.LOG_DEBUG)))
+)
+
+type Send_stderr int
+
+const (
+	Sd_send_stderr_allow_override Send_stderr = iota
+	Sd_send_stderr_true                       = iota
+	Sd_send_stderr_false                      = iota
 )
 
 var (
@@ -65,7 +71,7 @@ var (
 	default_send_stderr        = Sd_send_stderr_allow_override
 	default_remove_ansi_escape = false
 	package_lock               sync.Mutex
-	message_priority           = map[string]interface{}{c.Sd_message: ``, sd_priority: ``}
+	message_priority           = map[string]interface{}{Sd_message: ``, sd_priority: ``}
 	sd_priority                = "PRIORITY"
 )
 
@@ -153,11 +159,11 @@ func (j *Journal) load_defaults(message string, Priority Priority) map[string]in
 	defer j.lock.Unlock()
 	switch j.remove_ansi_escape {
 	case true:
-		j.default_fields[c.Sd_message] = j.remove_re2.ReplaceAllLiteralString(message, ``)
+		j.default_fields[Sd_message] = j.remove_re2.ReplaceAllLiteralString(message, ``)
 	case false:
-		j.default_fields[c.Sd_message] = message
+		j.default_fields[Sd_message] = message
 	}
-	j.default_fields[sd_priority] = c.Priority(Priority)
+	j.default_fields[sd_priority] = Priority
 
 	if id128 == nil {
 		delete(j.default_fields, sd_message_id)
@@ -411,17 +417,6 @@ func (j *Journal) Info_a_f(fields []string, format string, a ...interface{}) err
 
 func (j *Journal) Debug_a_f(fields []string, format string, a ...interface{}) error {
 	return j.Send(j.copy([]map[string]interface{}{j.a_to_map(fields), j.load_defaults(fmt.Sprintf(format, a...), Log_debug)}...))
-}
-
-// Send writes to the systemd-journal. The keys must be uppercase strings
-// without a leading _. The other send methods are easier to use. See Info(),
-// Infom(), Info_m_f(), etc. A MESSAGE key in field is the only required
-// field.
-//
-func (j *Journal) Send(fields map[string]interface{}) error {
-	j.lock.Lock()
-	defer j.lock.Unlock()
-	return c.Send(j.add_go_code_fields, c.Send_stderr(j.send_stderr), c.Send_stderr(default_send_stderr), fields)
 }
 
 // Set_add_go_code_fields will add GO_FILE (<file name>#<line #>),and GO_FUNC

@@ -4,15 +4,7 @@
 
 // +build linux,cgo
 
-/*
-Package c exists to allow the go guru tool to analyze package sd (DO NOT
-USE 🕱). guru skips packages that import C. Do not use any exported variables or
-functions in this package. Only use sd.
-
-This package is not safe for concurrent goroutine use. Package sd uses a lock
-manager and is goroutine safe.
-*/
-package c
+package sd
 
 /*
 #cgo pkg-config: --cflags --libs libsystemd
@@ -26,7 +18,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"log/syslog"
 	"os"
 	"regexp"
 	"runtime"
@@ -39,26 +30,6 @@ func init() {
 	valid_field, _ = regexp.Compile(sd_valid_field_regexp)
 }
 
-const (
-	sd_valid_field_regexp = `^[^_]{1}[\p{Lu}0-9_]*$`
-	Sd_message            = "MESSAGE"
-	sd_go_func            = "GO_FUNC"
-	sd_go_file            = "GO_FILE"
-)
-
-type Priority string
-
-var (
-	Log_emerg   = Priority(strconv.Itoa(int(syslog.LOG_EMERG)))
-	Log_alert   = Priority(strconv.Itoa(int(syslog.LOG_ALERT)))
-	Log_crit    = Priority(strconv.Itoa(int(syslog.LOG_CRIT)))
-	Log_err     = Priority(strconv.Itoa(int(syslog.LOG_ERR)))
-	Log_warning = Priority(strconv.Itoa(int(syslog.LOG_WARNING)))
-	Log_notice  = Priority(strconv.Itoa(int(syslog.LOG_NOTICE)))
-	Log_info    = Priority(strconv.Itoa(int(syslog.LOG_INFO)))
-	Log_debug   = Priority(strconv.Itoa(int(syslog.LOG_DEBUG)))
-)
-
 var (
 	valid_field         *regexp.Regexp
 	max_fields          uint64
@@ -66,20 +37,19 @@ var (
 	sd_field_name_sep_b = []byte{61}
 )
 
-type Send_stderr int
-
-const (
-	Sd_send_stderr_allow_override Send_stderr = iota
-	Sd_send_stderr_true                       = iota
-	Sd_send_stderr_false                      = iota
-)
-
-func Send(add_go_code_fields bool, send_stderr, default_send_stderr Send_stderr, fields map[string]interface{}) error {
+// Send writes to the systemd-journal. The keys must be uppercase strings
+// without a leading _. The other send methods are easier to use. See Info(),
+// Infom(), Info_m_f(), etc. A MESSAGE key in field is the only required
+// field.
+//
+func (j *Journal) Send(fields map[string]interface{}) error {
+	j.lock.Lock()
+	defer j.lock.Unlock()
 	if max_fields < uint64(len(fields)) {
 		return errors.New(fmt.Sprintf("Field count cannot exceed %v: %v given", max_fields, len(fields)))
 	}
-	if add_go_code_fields {
-		st := new_index(5)
+	if j.add_go_code_fields {
+		st := new_index(4)
 		fields[sd_go_func] = st.Func()
 		fields[sd_go_file] = st.File() + `:` + st.Line_s()
 	}
@@ -115,8 +85,8 @@ func Send(add_go_code_fields bool, send_stderr, default_send_stderr Send_stderr,
 		i++
 	}
 	switch {
-	case send_stderr != Sd_send_stderr_allow_override:
-		if send_stderr == Sd_send_stderr_true {
+	case j.send_stderr != Sd_send_stderr_allow_override:
+		if j.send_stderr == Sd_send_stderr_true {
 			fmt.Fprintf(os.Stderr, "%v", fields[Sd_message])
 		}
 	case default_send_stderr == Sd_send_stderr_true:
