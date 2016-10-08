@@ -48,7 +48,7 @@ const (
 
 type Priority c.Priority
 
-// These are log/syslog.Priority values
+// These are log/syslog.Priority values.
 var (
 	Log_emerg   = Priority(c.Log_emerg)
 	Log_alert   = Priority(c.Log_alert)
@@ -97,7 +97,7 @@ func New_journal() *Journal {
 }
 
 // New_journal_m makes a Journal. The allowable interface{} values are
-// string and []byte
+// string and []byte. A copy of []byte is made.
 //
 func New_journal_m(default_fields map[string]interface{}) *Journal {
 	j := &Journal{
@@ -141,7 +141,8 @@ func (j *Journal) copy(maps ...map[string]interface{}) map[string]interface{} {
 
 // Default fields are sent with every Send().
 // Do not include MESSAGE, or Priority, as these fields are always sent. The
-// allowable interface{} values are string and []byte
+// allowable interface{} values are string and []byte. A copy of []byte is
+// made.
 //
 func (j *Journal) Set_default_fields(fields map[string]interface{}) {
 	j.default_fields = j.copy([]map[string]interface{}{fields, message_priority, id128}...)
@@ -167,7 +168,7 @@ func (j *Journal) load_defaults(message string, Priority Priority) map[string]in
 }
 
 // Set_remove_ansi_escape determines if ANSI escape sequences are removed.
-// Default: false
+// Default: false.
 //
 func (j *Journal) Set_remove_ansi_escape(remove bool) {
 	j.lock.Lock()
@@ -177,7 +178,7 @@ func (j *Journal) Set_remove_ansi_escape(remove bool) {
 
 // Set_writer_priority set the priority for the write() receiver.
 // You'll probably want to use Set_remove_ansi(true).
-// Default: Log_info
+// Default: Log_info.
 //
 func (j *Journal) Set_writer_priority(p Priority) {
 	j.lock.Lock()
@@ -188,7 +189,7 @@ func (j *Journal) Set_writer_priority(p Priority) {
 // Writer implements io.Writer.
 // Allows Jhournal to be used in the log package.
 // You might want to use Set_remove_ansi(true).
-// See http://godoc.org/log#SetOutput
+// See http://godoc.org/log#SetOutput.
 //
 func (j *Journal) Write(b []byte) (int, error) {
 	return len(b), j.Send(j.load_defaults(string(b), j.writer_priority))
@@ -423,9 +424,9 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 	return c.Send(j.add_go_code_fields, c.Send_stderr(j.send_stderr), c.Send_stderr(default_send_stderr), fields)
 }
 
-// Set_add_go_code_fields will add GO_FILE (file/line),and GO_FUNC fields to
-// the journal Send() methods, Info(), Err(), Warning(), etc.. Default:
-// use_go_code_fields = true
+// Set_add_go_code_fields will add GO_FILE (<file name>#<line #>),and GO_FUNC
+// fields to the journal Send() methods, Info(), Err(), Warning(), etc..
+// Default: use_go_code_fields = true.
 //
 func (j *Journal) Set_add_go_code_fields(use bool) {
 	j.lock.Lock()
@@ -462,9 +463,9 @@ func Set_message_id(uuid string) {
 }
 
 // Set_default_send_stderr to Sd_send_stderr_true to send a message to
-// os.Stderr in addition to the journal. Can be overridden if
+// os.Stderr in addition to the journal. Can be overridden when
 // Journal.Set_send_stderr(Sd_send_stderr_true) is called. Default:
-// Sd_send_stderr_override; i.e. will not send to stderr
+// Sd_send_stderr_override; i.e. will not send to stderr.
 //
 func Set_default_send_stderr(use Send_stderr) {
 	package_lock.Lock()
@@ -473,7 +474,7 @@ func Set_default_send_stderr(use Send_stderr) {
 }
 
 // Set default_remove_ansi_escape will set the default value for new Journal.
-// Default: remove = false
+// Default: remove = false.
 //
 func Set_default_remove_ansi_escape(remove bool) {
 	package_lock.Lock()

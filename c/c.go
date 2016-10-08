@@ -5,9 +5,12 @@
 // +build linux,cgo
 
 /*
-Package c exists to allow the go guru tool to analyze package sd. guru skips
-packages that import C. Do not use any exported variables or functions in
-this package. Only use sd.
+Package c exists to allow the go guru tool to analyze package sd (DO NOT
+USE 🕱). guru skips packages that import C. Do not use any exported variables or
+functions in this package. Only use sd.
+
+This package is not safe for concurrent goroutine use. Package sd uses a lock
+manager and is goroutine safe.
 */
 package c
 
