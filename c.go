@@ -53,32 +53,27 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 		fields[sd_go_func] = st.Func()
 		fields[sd_go_file] = st.File() + `:` + st.Line_s()
 	}
-	iov := make([]C.struct_iovec, len(fields))
+	iov := C.malloc(C.size_t(C.sizeof_struct_iovec * len(fields)))
+	defer C.free(iov)
+	ref := make([]*bytes.Buffer, len(fields))
 	i := 0
-	defer func() {
-		for j := 0; j < i; j++ {
-			C.free(unsafe.Pointer(iov[j].iov_base))
-		}
-	}()
-	var s string
-	var b []byte
 	for k, v := range fields {
 		if valid_field.FindString(k) == "" {
 			return fmt.Errorf("field violates regexp %v : %v", valid_field, k)
 		}
 		switch t := v.(type) {
 		case string:
-			s = k + sd_field_name_sep_s + t
-			iov[i].iov_base = unsafe.Pointer(C.CString(s))
-			iov[i].iov_len = C.size_t(len(s))
+			ref[i] = bytes.NewBufferString(k + sd_field_name_sep_s + t)
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_base = unsafe.Pointer(&ref[i].Bytes()[0])
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_len = C.size_t(ref[i].Len())
 		case Priority:
-			s = k + sd_field_name_sep_s + string(t)
-			iov[i].iov_base = unsafe.Pointer(C.CString(s))
-			iov[i].iov_len = C.size_t(len(s))
+			ref[i] = bytes.NewBufferString(k + sd_field_name_sep_s + string(t))
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_base = unsafe.Pointer(&ref[i].Bytes()[0])
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_len = C.size_t(ref[i].Len())
 		case []byte:
-			b = bytes.Join([][]byte{[]byte(k), t}, sd_field_name_sep_b)
-			iov[i].iov_base = C.CBytes(b)
-			iov[i].iov_len = C.size_t(len(b))
+			ref[i] = bytes.NewBuffer(bytes.Join([][]byte{[]byte(k), t}, sd_field_name_sep_b))
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_base = unsafe.Pointer(&ref[i].Bytes()[0])
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_len = C.size_t(ref[i].Len())
 		default:
 			return fmt.Errorf("Error: Unsupported field value: key = %v", k)
 		}
@@ -92,7 +87,7 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 	case default_send_stderr == Sd_send_stderr_true:
 		fmt.Fprintf(os.Stderr, "%v", fields[Sd_message])
 	}
-	n, _ := C.sd_journal_sendv(&iov[0], C.int(len(iov)))
+	n, _ := C.sd_journal_sendv(iov, C.int(len(fields)))
 	if n != 0 {
 		return errors.New("Error with sd_journal_sendv arguments")
 	}
