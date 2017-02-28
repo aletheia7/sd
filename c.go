@@ -87,7 +87,7 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 	case default_send_stderr == Sd_send_stderr_true:
 		fmt.Fprintf(os.Stderr, "%v", fields[Sd_message])
 	}
-	n, _ := C.sd_journal_sendv(iov, C.int(len(fields)))
+	n, _ := C.sd_journal_sendv((*C.struct_iovec)(iov), C.int(len(fields)))
 	if n != 0 {
 		return errors.New("Error with sd_journal_sendv arguments")
 	}
