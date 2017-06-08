@@ -54,26 +54,30 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 		fields[sd_go_file] = st.File() + `:` + st.Line_s()
 	}
 	iov := C.malloc(C.size_t(C.sizeof_struct_iovec * len(fields)))
-	defer C.free(iov)
-	ref := make([]*bytes.Buffer, len(fields))
 	i := 0
+	defer func() {
+		for j := 0; j < i; j++ {
+			C.free(((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(j)*C.sizeof_struct_iovec))).iov_base)
+		}
+		C.free(iov)
+	}()
 	for k, v := range fields {
 		if valid_field.FindString(k) == "" {
 			return fmt.Errorf("field violates regexp %v : %v", valid_field, k)
 		}
 		switch t := v.(type) {
 		case string:
-			ref[i] = bytes.NewBufferString(k + sd_field_name_sep_s + t)
-			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_base = unsafe.Pointer(&ref[i].Bytes()[0])
-			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_len = C.size_t(ref[i].Len())
+			s := k + sd_field_name_sep_s + t
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_base = unsafe.Pointer(C.CString(s))
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_len = C.size_t(len(s))
 		case Priority:
-			ref[i] = bytes.NewBufferString(k + sd_field_name_sep_s + string(t))
-			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_base = unsafe.Pointer(&ref[i].Bytes()[0])
-			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_len = C.size_t(ref[i].Len())
+			s := k + sd_field_name_sep_s + string(t)
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_base = unsafe.Pointer(C.CString(s))
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_len = C.size_t(len(s))
 		case []byte:
-			ref[i] = bytes.NewBuffer(bytes.Join([][]byte{[]byte(k), t}, sd_field_name_sep_b))
-			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_base = unsafe.Pointer(&ref[i].Bytes()[0])
-			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_len = C.size_t(ref[i].Len())
+			b := bytes.Join([][]byte{[]byte(k), t}, sd_field_name_sep_b)
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_base = C.CBytes(b)
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_len = C.size_t(len(b))
 		default:
 			return fmt.Errorf("Error: Unsupported field value: key = %v", k)
 		}
