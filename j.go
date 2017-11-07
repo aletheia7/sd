@@ -2,6 +2,8 @@
 // governed by a BSD-2-Clause license that can be found in the LICENSE file.
 /*
 
+// +build linux,cgo
+
 Package sd provides methods to write to the systemd-journal.
 
 New_journal() and New_journal_m() create a Journal struct.
@@ -27,20 +29,26 @@ can take nil map in order to only use the format functionality.
 
 package sd
 
+/*
+#cgo pkg-config: --cflags --libs libsystemd
+#include <stdlib.h>
+#include <systemd/sd-journal.h>
+#include <unistd.h>
+*/
+import "C"
+
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"log/syslog"
+	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
-)
-
-const (
-	Sd_message            = "MESSAGE"
-	sd_valid_field_regexp = `^[^_]{1}[\p{Lu}0-9_]*$`
-	sd_go_func            = "GO_FUNC"
-	sd_go_file            = "GO_FILE"
+	"unsafe"
 )
 
 type Priority string
@@ -61,8 +69,15 @@ type Send_stderr int
 
 const (
 	Sd_send_stderr_allow_override Send_stderr = iota
-	Sd_send_stderr_true                       = iota
-	Sd_send_stderr_false                      = iota
+	Sd_send_stderr_true
+	Sd_send_stderr_false
+)
+
+const (
+	Sd_message  = "MESSAGE"
+	sd_go_func  = "GO_FUNC"
+	sd_go_file  = "GO_FILE"
+	sd_priority = "PRIORITY"
 )
 
 var (
@@ -71,7 +86,10 @@ var (
 	default_remove_ansi_escape = false
 	package_lock               sync.Mutex
 	message_priority           = map[string]interface{}{Sd_message: ``, sd_priority: ``}
-	sd_priority                = "PRIORITY"
+	valid_field                = regexp.MustCompile(`^[^_]{1}[\p{Lu}0-9_]*$`)
+	max_fields                 = uint64(C.sysconf(C._SC_IOV_MAX))
+	sd_field_name_sep_s        = string(sd_field_name_sep_b)
+	sd_field_name_sep_b        = []byte{61}
 )
 
 // See http://www.freedesktop.org/software/systemd/man/SD_JOURNAL_SUPPRESS_LOCATION.html,
@@ -474,4 +492,92 @@ func Set_default_remove_ansi_escape(remove bool) {
 	package_lock.Lock()
 	defer package_lock.Unlock()
 	default_remove_ansi_escape = remove
+}
+
+// Send writes to the systemd-journal. The keys must be uppercase strings
+// without a leading _. The other send methods are easier to use. See Info(),
+// Infom(), Info_m_f(), etc. A MESSAGE key in field is the only required
+// field.
+//
+func (j *Journal) Send(fields map[string]interface{}) error {
+	j.lock.Lock()
+	defer j.lock.Unlock()
+	if max_fields < uint64(len(fields)) {
+		return errors.New(fmt.Sprintf("Field count cannot exceed %v: %v given", max_fields, len(fields)))
+	}
+	if j.add_go_code_fields {
+		fn, file, line := file_line()
+		fields[sd_go_func] = fn
+		fields[sd_go_file] = file + `:` + strconv.Itoa(line)
+	}
+	iov := C.malloc(C.size_t(C.sizeof_struct_iovec * len(fields)))
+	i := 0
+	defer func() {
+		for j := 0; j < i; j++ {
+			C.free(((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(j)*C.sizeof_struct_iovec))).iov_base)
+		}
+		C.free(iov)
+	}()
+	for k, v := range fields {
+		if valid_field.FindString(k) == "" {
+			return fmt.Errorf("field violates regexp %v : %v", valid_field, k)
+		}
+		switch t := v.(type) {
+		case string:
+			s := k + sd_field_name_sep_s + t
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_base = unsafe.Pointer(C.CString(s))
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_len = C.size_t(len(s))
+		case Priority:
+			s := k + sd_field_name_sep_s + string(t)
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_base = unsafe.Pointer(C.CString(s))
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_len = C.size_t(len(s))
+		case []byte:
+			b := bytes.Join([][]byte{[]byte(k), t}, sd_field_name_sep_b)
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_base = C.CBytes(b)
+			((*C.struct_iovec)(unsafe.Pointer(uintptr(iov) + uintptr(i)*C.sizeof_struct_iovec))).iov_len = C.size_t(len(b))
+		default:
+			return fmt.Errorf("Error: Unsupported field value: key = %v", k)
+		}
+		i++
+	}
+	switch {
+	case j.send_stderr != Sd_send_stderr_allow_override:
+		if j.send_stderr == Sd_send_stderr_true {
+			fmt.Fprintf(os.Stderr, "%v", fields[Sd_message])
+		}
+	case default_send_stderr == Sd_send_stderr_true:
+		fmt.Fprintf(os.Stderr, "%v", fields[Sd_message])
+	}
+	n, _ := C.sd_journal_sendv((*C.struct_iovec)(iov), C.int(len(fields)))
+	if n != 0 {
+		return errors.New("Error with sd_journal_sendv arguments")
+	}
+	return nil
+}
+
+func file_line() (fn string, file string, line int) {
+	pc := make([]uintptr, 1)
+	n := runtime.Callers(4, pc)
+	if n == 0 {
+		return ``, ``, 0
+	}
+	frames := runtime.CallersFrames(pc[:n])
+	frame, _ := frames.Next()
+	return frame.Function, trim_go_path(frame.Function, frame.File), frame.Line
+}
+
+func trim_go_path(name, file string) string {
+	// From github.com/pkg/errors, BSD-2-Clause
+	const sep = "/"
+	goal := strings.Count(name, sep) + 2
+	i := len(file)
+	for n := 0; n < goal; n++ {
+		i = strings.LastIndex(file[:i], sep)
+		if i == -1 {
+			i = -len(sep)
+			break
+		}
+	}
+	file = file[i+len(sep):]
+	return file
 }
