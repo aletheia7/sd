@@ -68,10 +68,11 @@ var (
 )
 
 const (
-	Sd_message  = "MESSAGE"
 	sd_go_func  = "GO_FUNC"
 	sd_go_file  = "GO_FILE"
 	sd_priority = "PRIORITY"
+	// UUID, See man journalctl --new-id128
+	sd_message_id = "MESSAGE_ID"
 )
 
 type remove_ansi_escape int
@@ -106,10 +107,9 @@ var (
 // See http://www.freedesktop.org/software/systemd/man/SD_JOURNAL_SUPPRESS_LOCATION.html,
 // or man sd_journal_print, for valid systemd journal fields.
 const (
+	Sd_message = "MESSAGE"
 	// Used in Set_default_fields(). systemd provides a default
 	Sd_tag = "SYSLOG_IDENTIFIER"
-	// UUID, See man journalctl --new-id128
-	sd_message_id = "MESSAGE_ID"
 )
 
 // Journal can contain default systemd fields.
@@ -130,6 +130,31 @@ func Set_remove_ansi(rm remove_ansi_escape) option {
 		prev := o.remove
 		o.remove = rm
 		return Set_remove_ansi(prev)
+	}
+}
+
+// Sets the journal field name to value. The field will
+// be removed when value is nil. An invalid name will be
+// silently ignored. See info for Sd_tag.
+//
+func Set_field(name string, value interface{}) option {
+	if valid_field.FindString(name) == "" {
+		return func(o *Journal) option {
+			return Set_field(``, nil)
+		}
+	}
+	if value == nil {
+		return func(o *Journal) option {
+			prev := o.default_fields[name]
+			delete(o.default_fields, name)
+			return Set_field(name, prev)
+		}
+	} else {
+		return func(o *Journal) option {
+			prev := o.default_fields[name]
+			o.default_fields[name] = value
+			return Set_field(name, prev)
+		}
 	}
 }
 
