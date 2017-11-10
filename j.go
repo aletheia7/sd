@@ -41,6 +41,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/aletheia7/sd/ansi"
+	"io"
 	"log/syslog"
 	"os"
 	"regexp"
@@ -65,14 +67,6 @@ var (
 	Log_debug   = Priority(strconv.Itoa(int(syslog.LOG_DEBUG)))
 )
 
-type Send_stderr int
-
-const (
-	Sd_send_stderr_allow_override Send_stderr = iota
-	Sd_send_stderr_true
-	Sd_send_stderr_false
-)
-
 const (
 	Sd_message  = "MESSAGE"
 	sd_go_func  = "GO_FUNC"
@@ -80,16 +74,33 @@ const (
 	sd_priority = "PRIORITY"
 )
 
+type remove_ansi_escape int
+
+const (
+	// bit flags
+	Remove_journal remove_ansi_escape = 1 << iota
+	Remove_writer
+)
+
 var (
 	id128                      map[string]interface{}
-	default_send_stderr        = Sd_send_stderr_allow_override
-	default_remove_ansi_escape = false
-	package_lock               sync.Mutex
-	message_priority           = map[string]interface{}{Sd_message: ``, sd_priority: ``}
-	valid_field                = regexp.MustCompile(`^[^_]{1}[\p{Lu}0-9_]*$`)
-	max_fields                 = uint64(C.sysconf(C._SC_IOV_MAX))
-	sd_field_name_sep_s        = string(sd_field_name_sep_b)
-	sd_field_name_sep_b        = []byte{61}
+	default_writer             io.Writer
+	default_remove_ansi_escape = Set_remove_ansi(0)
+	default_color              = map[Priority]string{
+		Log_alert:   ansi.ColorCode("red+bh"),
+		Log_crit:    ansi.ColorCode("red+bh"),
+		Log_err:     ansi.ColorCode("red+bh"),
+		Log_warning: ansi.ColorCode("208+bh"), // orange
+		Log_notice:  ansi.ColorCode("208+bh"), // orange
+	}
+	default_use_color   = true
+	package_lock        sync.Mutex
+	message_priority    = map[string]interface{}{Sd_message: ``, sd_priority: ``}
+	valid_field         = regexp.MustCompile(`^[^_]{1}[\p{Lu}0-9_]*$`)
+	max_fields          = uint64(C.sysconf(C._SC_IOV_MAX))
+	sd_field_name_sep_s = string(sd_field_name_sep_b)
+	sd_field_name_sep_b = []byte{61}
+	remove_re2          = regexp.MustCompile(`\x1b[^m]*m`)
 )
 
 // See http://www.freedesktop.org/software/systemd/man/SD_JOURNAL_SUPPRESS_LOCATION.html,
@@ -107,10 +118,43 @@ type Journal struct {
 	default_fields     map[string]interface{}
 	lock               sync.Mutex
 	add_go_code_fields bool
-	send_stderr        Send_stderr
-	remove_ansi_escape bool
-	writer_priority    Priority
-	remove_re2         *regexp.Regexp
+	writer             io.Writer
+	remove             remove_ansi_escape
+	priority           Priority
+}
+
+type option func(o *Journal) option
+
+func Set_remove_ansi(rm remove_ansi_escape) option {
+	return func(o *Journal) option {
+		prev := o.remove
+		o.remove = rm
+		return Set_remove_ansi(prev)
+	}
+}
+
+func Set_priority(p Priority) option {
+	return func(o *Journal) option {
+		prev := o.priority
+		o.priority = p
+		return Set_priority(prev)
+	}
+}
+
+func Set_writer(w io.Writer) option {
+	return func(o *Journal) option {
+		prev := o.writer
+		o.writer = w
+		return Set_writer(prev)
+	}
+}
+
+// New makes a Journal
+//
+func New(opt ...option) *Journal {
+	r := New_journal_m(nil)
+	r.Option(opt...)
+	return r
 }
 
 // New_journal makes a Journal.
@@ -125,12 +169,22 @@ func New_journal() *Journal {
 func New_journal_m(default_fields map[string]interface{}) *Journal {
 	j := &Journal{
 		add_go_code_fields: true,
-		remove_ansi_escape: default_remove_ansi_escape,
-		writer_priority:    Log_info,
+		priority:           Log_info,
 	}
-	j.remove_re2 = regexp.MustCompile(`\x1b[^m]*m`)
 	j.Set_default_fields(default_fields)
 	return j
+}
+
+// Option sets the options specified.
+// It returns an option to restore the last arg's previous value.
+//
+func (o *Journal) Option(opt ...option) (previous option) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	for _, i := range opt {
+		previous = i(o)
+	}
+	return
 }
 
 // Copy copies maps into a new map.
@@ -174,14 +228,8 @@ func (j *Journal) Set_default_fields(fields map[string]interface{}) {
 func (j *Journal) load_defaults(message string, Priority Priority) map[string]interface{} {
 	j.lock.Lock()
 	defer j.lock.Unlock()
-	switch j.remove_ansi_escape {
-	case true:
-		j.default_fields[Sd_message] = j.remove_re2.ReplaceAllLiteralString(message, ``)
-	case false:
-		j.default_fields[Sd_message] = message
-	}
+	j.default_fields[Sd_message] = message
 	j.default_fields[sd_priority] = Priority
-
 	if id128 == nil {
 		delete(j.default_fields, sd_message_id)
 	} else {
@@ -190,23 +238,14 @@ func (j *Journal) load_defaults(message string, Priority Priority) map[string]in
 	return j.default_fields
 }
 
-// Set_remove_ansi_escape determines if ANSI escape sequences are removed.
-// Default: false.
-//
-func (j *Journal) Set_remove_ansi_escape(remove bool) {
-	j.lock.Lock()
-	defer j.lock.Unlock()
-	j.remove_ansi_escape = remove
-}
-
 // Set_writer_priority set the priority for the write() receiver.
-// You'll probably want to use Set_remove_ansi(true).
+// You'll probably want to use Set_remove_ansi(sd.Remove_journal).
 // Default: Log_info.
 //
 func (j *Journal) Set_writer_priority(p Priority) {
 	j.lock.Lock()
 	defer j.lock.Unlock()
-	j.writer_priority = p
+	j.priority = p
 }
 
 // Writer implements io.Writer.
@@ -215,7 +254,7 @@ func (j *Journal) Set_writer_priority(p Priority) {
 // See http://godoc.org/log#SetOutput.
 //
 func (j *Journal) Write(b []byte) (int, error) {
-	return len(b), j.Send(j.load_defaults(string(b), j.writer_priority))
+	return len(b), j.Send(j.load_defaults(string(b), j.priority))
 }
 
 func (j *Journal) Emerg(a ...interface{}) error {
@@ -446,18 +485,6 @@ func (j *Journal) Set_add_go_code_fields(use bool) {
 	j.add_go_code_fields = use
 }
 
-// Set_send_stderr to Sd_send_stderr_true to send a message to os.Stderr in
-// addition to the systemd journal. Set_send_stderr to Sd_send_stderr_false
-// to prevent sending to os.Stderr. This will override
-// Set_default_stderr_override() Default: Sd_send_stderr_override; i.e.
-// allow Set_default_stderr_override() the first choice.
-//
-func (j *Journal) Set_send_stderr(use Send_stderr) {
-	j.lock.Lock()
-	defer j.lock.Unlock()
-	j.send_stderr = use
-}
-
 // Set_message_id sets the systemd MESSAGE_ID (UUID) for all Journal
 // (Global) instances. Generate an application UUID with journalctl
 // --new-id128. See man journalctl.
@@ -474,24 +501,49 @@ func Set_message_id(uuid string) {
 	}
 }
 
-// Set_default_send_stderr to Sd_send_stderr_true to send a message to
-// os.Stderr in addition to the journal. Can be overridden when
-// Journal.Set_send_stderr(Sd_send_stderr_true) is called. Default:
-// Sd_send_stderr_override; i.e. will not send to stderr.
-//
-func Set_default_send_stderr(use Send_stderr) {
+func Set_default_writer_stderr() (previous io.Writer) {
 	package_lock.Lock()
 	defer package_lock.Unlock()
-	default_send_stderr = use
+	previous = default_writer
+	default_writer = os.Stderr
+	return
 }
 
-// Set default_remove_ansi_escape will set the default value for new Journal.
-// Default: remove = false.
-//
-func Set_default_remove_ansi_escape(remove bool) {
+func Set_default_writer_stdout() (previous io.Writer) {
 	package_lock.Lock()
 	defer package_lock.Unlock()
-	default_remove_ansi_escape = remove
+	previous = default_writer
+	default_writer = os.Stdout
+	return
+}
+
+// Set output to an additional io.Writer
+//
+func Set_default_writer(w io.Writer) {
+	package_lock.Lock()
+	defer package_lock.Unlock()
+	default_writer = w
+}
+
+// Set default colors for io.Writer.
+//
+// default: red (bold, highlight): Log_alert, Log_crti, Log_err, orange (bold, highlight):
+// Log_warning, Log_notice
+//
+// example: map[Priority]string{Log_err: ansi.ColorCode("green")}
+//
+func Set_default_colors(colors map[Priority]string) {
+	package_lock.Lock()
+	defer package_lock.Unlock()
+	default_color = colors
+}
+
+// Set default_remove_ansi_escape will set the default value for a new Journal.
+//
+func Set_default_remove_ansi_escape(rm remove_ansi_escape) {
+	package_lock.Lock()
+	defer package_lock.Unlock()
+	default_remove_ansi_escape = Set_remove_ansi(rm)
 }
 
 // Send writes to the systemd-journal. The keys must be uppercase strings
@@ -518,6 +570,42 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 		}
 		C.free(iov)
 	}()
+	if s, ok := fields[Sd_message].(string); ok {
+		var priority Priority
+		if p, ok := fields[sd_priority].(Priority); ok {
+			priority = Priority(p)
+		}
+		w := j.writer
+		if w == nil {
+			w = default_writer
+		}
+		var cleaned_s string
+		// writer
+		if w != nil {
+			if j.remove&Remove_writer != 0 {
+				cleaned_s = remove_re2.ReplaceAllLiteralString(s, ``)
+				if default_use_color {
+					fmt.Fprintf(w, default_color[priority]+cleaned_s+ansi.Reset)
+				} else {
+					fmt.Fprintf(w, cleaned_s)
+				}
+			} else {
+				if default_use_color {
+					fmt.Fprintf(w, default_color[priority]+s+ansi.Reset)
+				} else {
+					fmt.Fprintf(w, s)
+				}
+			}
+		}
+		// journal
+		if j.remove&Remove_journal != 0 {
+			if 0 == len(cleaned_s) {
+				fields[Sd_message] = remove_re2.ReplaceAllLiteralString(s, ``)
+			} else {
+				fields[Sd_message] = cleaned_s
+			}
+		}
+	}
 	for k, v := range fields {
 		if valid_field.FindString(k) == "" {
 			return fmt.Errorf("field violates regexp %v : %v", valid_field, k)
@@ -539,14 +627,6 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 			return fmt.Errorf("Error: Unsupported field value: key = %v", k)
 		}
 		i++
-	}
-	switch {
-	case j.send_stderr != Sd_send_stderr_allow_override:
-		if j.send_stderr == Sd_send_stderr_true {
-			fmt.Fprintf(os.Stderr, "%v", fields[Sd_message])
-		}
-	case default_send_stderr == Sd_send_stderr_true:
-		fmt.Fprintf(os.Stderr, "%v", fields[Sd_message])
 	}
 	n, _ := C.sd_journal_sendv((*C.struct_iovec)(iov), C.int(len(fields)))
 	if n != 0 {
