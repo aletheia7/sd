@@ -86,7 +86,7 @@ const (
 var (
 	id128                      map[string]interface{}
 	default_writer             io.Writer
-	default_remove_ansi_escape = Set_remove_ansi(0)
+	default_remove_ansi_escape remove_ansi_escape
 	default_color              = map[Priority]string{
 		Log_alert:   ansi.ColorCode("red+bh"),
 		Log_crit:    ansi.ColorCode("red+bh"),
@@ -130,6 +130,21 @@ func Set_remove_ansi(rm remove_ansi_escape) option {
 		prev := o.remove
 		o.remove = rm
 		return Set_remove_ansi(prev)
+	}
+}
+
+// Sets the package level/default remove_ansi_escape and the current
+// *Journal intance.
+// Returns previous default remove_ansi_escape.
+//
+func Set_default_remove_ansi(rm remove_ansi_escape) option {
+	return func(o *Journal) option {
+		package_lock.Lock()
+		defer package_lock.Unlock()
+		prev := default_remove_ansi_escape
+		default_remove_ansi_escape = rm
+		o.remove = default_remove_ansi_escape
+		return Set_default_remove_ansi(prev)
 	}
 }
 
@@ -195,6 +210,8 @@ func New_journal_m(default_fields map[string]interface{}) *Journal {
 	j := &Journal{
 		add_go_code_fields: true,
 		priority:           Log_info,
+		remove:             default_remove_ansi_escape,
+		writer:             default_writer,
 	}
 	j.Set_default_fields(default_fields)
 	return j
@@ -526,28 +543,24 @@ func Set_message_id(uuid string) {
 	}
 }
 
-func Set_default_writer_stderr() (previous io.Writer) {
-	package_lock.Lock()
-	defer package_lock.Unlock()
-	previous = default_writer
-	default_writer = os.Stderr
-	return
+func Set_default_writer_stderr() option {
+	return Set_default_writer(os.Stderr)
 }
 
-func Set_default_writer_stdout() (previous io.Writer) {
-	package_lock.Lock()
-	defer package_lock.Unlock()
-	previous = default_writer
-	default_writer = os.Stdout
-	return
+func Set_default_writer_stdout() option {
+	return Set_default_writer(os.Stdout)
 }
 
 // Set output to an additional io.Writer
 //
-func Set_default_writer(w io.Writer) {
-	package_lock.Lock()
-	defer package_lock.Unlock()
-	default_writer = w
+func Set_default_writer(w io.Writer) option {
+	return func(o *Journal) option {
+		package_lock.Lock()
+		defer package_lock.Unlock()
+		prev := default_writer
+		default_writer = w
+		return Set_default_writer(prev)
+	}
 }
 
 // Set default colors for io.Writer.
@@ -568,7 +581,7 @@ func Set_default_colors(colors map[Priority]string) {
 func Set_default_remove_ansi_escape(rm remove_ansi_escape) {
 	package_lock.Lock()
 	defer package_lock.Unlock()
-	default_remove_ansi_escape = Set_remove_ansi(rm)
+	default_remove_ansi_escape = rm
 }
 
 // Send writes to the systemd-journal. The keys must be uppercase strings
