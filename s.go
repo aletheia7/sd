@@ -94,14 +94,15 @@ var (
 		Log_warning: ansi.ColorCode("208+bh"), // orange
 		Log_notice:  ansi.ColorCode("208+bh"), // orange
 	}
-	default_use_color   = true
-	package_lock        sync.Mutex
-	message_priority    = map[string]interface{}{Sd_message: ``, sd_priority: ``}
-	valid_field         = regexp.MustCompile(`^[^_]{1}[\p{Lu}0-9_]*$`)
-	max_fields          = uint64(C.sysconf(C._SC_IOV_MAX))
-	sd_field_name_sep_s = string(sd_field_name_sep_b)
-	sd_field_name_sep_b = []byte{61}
-	remove_re2          = regexp.MustCompile(`\x1b[^m]*m`)
+	default_disable_journal = false
+	default_use_color       = true
+	package_lock            sync.Mutex
+	message_priority        = map[string]interface{}{Sd_message: ``, sd_priority: ``}
+	valid_field             = regexp.MustCompile(`^[^_]{1}[\p{Lu}0-9_]*$`)
+	max_fields              = uint64(C.sysconf(C._SC_IOV_MAX))
+	sd_field_name_sep_s     = string(sd_field_name_sep_b)
+	sd_field_name_sep_b     = []byte{61}
+	remove_re2              = regexp.MustCompile(`\x1b[^m]*m`)
 )
 
 // See http://www.freedesktop.org/software/systemd/man/SD_JOURNAL_SUPPRESS_LOCATION.html,
@@ -207,12 +208,14 @@ func New_journal() *Journal {
 // string and []byte. A copy of []byte is made.
 //
 func New_journal_m(default_fields map[string]interface{}) *Journal {
+	package_lock.Lock()
 	j := &Journal{
 		add_go_code_fields: true,
 		priority:           Log_info,
 		remove:             default_remove_ansi_escape,
 		writer:             default_writer,
 	}
+	package_lock.Unlock()
 	j.Set_default_fields(default_fields)
 	return j
 }
@@ -584,6 +587,19 @@ func Set_default_remove_ansi_escape(rm remove_ansi_escape) {
 	default_remove_ansi_escape = rm
 }
 
+// Journal output will be disabled. Useful for just stdout/stderr logging with
+// color.
+//
+func Set_default_disable_journal(disable bool) option {
+	return func(o *Journal) option {
+		package_lock.Lock()
+		defer package_lock.Unlock()
+		prev := default_disable_journal
+		default_disable_journal = disable
+		return Set_default_disable_journal(prev)
+	}
+}
+
 // Send writes to the systemd-journal. The keys must be uppercase strings
 // without a leading _. The other send methods are easier to use. See Info(),
 // Infom(), Info_m_f(), etc. A MESSAGE key in field is the only required
@@ -592,6 +608,55 @@ func Set_default_remove_ansi_escape(rm remove_ansi_escape) {
 func (j *Journal) Send(fields map[string]interface{}) error {
 	j.lock.Lock()
 	defer j.lock.Unlock()
+	package_lock.Lock()
+	disable_journal := default_disable_journal
+	package_lock.Unlock()
+	w := j.writer
+	if w == nil {
+		package_lock.Lock()
+		w = default_writer
+		package_lock.Unlock()
+	}
+	if s, ok := fields[Sd_message].(string); ok {
+		var priority Priority
+		if p, ok := fields[sd_priority].(Priority); ok {
+			priority = Priority(p)
+		}
+		var cleaned_s string
+		// writer
+		if w != nil {
+			if j.remove&Remove_writer != 0 {
+				cleaned_s = remove_re2.ReplaceAllLiteralString(s, ``)
+				if default_use_color {
+					package_lock.Lock()
+					fmt.Fprintf(w, default_color[priority]+cleaned_s+ansi.Reset)
+					package_lock.Unlock()
+				} else {
+					fmt.Fprintf(w, cleaned_s)
+				}
+			} else {
+				if default_use_color {
+					package_lock.Lock()
+					fmt.Fprintf(w, default_color[priority]+s+ansi.Reset)
+					package_lock.Unlock()
+				} else {
+					fmt.Fprintf(w, s)
+				}
+			}
+		}
+		if disable_journal {
+			return nil
+		}
+		// journal
+		if j.remove&Remove_journal != 0 {
+			if 0 == len(cleaned_s) {
+				fields[Sd_message] = remove_re2.ReplaceAllLiteralString(s, ``)
+			} else {
+				fields[Sd_message] = cleaned_s
+			}
+		}
+	}
+	// journal
 	if max_fields < uint64(len(fields)) {
 		return errors.New(fmt.Sprintf("Field count cannot exceed %v: %v given", max_fields, len(fields)))
 	}
@@ -608,42 +673,6 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 		}
 		C.free(iov)
 	}()
-	if s, ok := fields[Sd_message].(string); ok {
-		var priority Priority
-		if p, ok := fields[sd_priority].(Priority); ok {
-			priority = Priority(p)
-		}
-		w := j.writer
-		if w == nil {
-			w = default_writer
-		}
-		var cleaned_s string
-		// writer
-		if w != nil {
-			if j.remove&Remove_writer != 0 {
-				cleaned_s = remove_re2.ReplaceAllLiteralString(s, ``)
-				if default_use_color {
-					fmt.Fprintf(w, default_color[priority]+cleaned_s+ansi.Reset)
-				} else {
-					fmt.Fprintf(w, cleaned_s)
-				}
-			} else {
-				if default_use_color {
-					fmt.Fprintf(w, default_color[priority]+s+ansi.Reset)
-				} else {
-					fmt.Fprintf(w, s)
-				}
-			}
-		}
-		// journal
-		if j.remove&Remove_journal != 0 {
-			if 0 == len(cleaned_s) {
-				fields[Sd_message] = remove_re2.ReplaceAllLiteralString(s, ``)
-			} else {
-				fields[Sd_message] = cleaned_s
-			}
-		}
-	}
 	for k, v := range fields {
 		if valid_field.FindString(k) == "" {
 			return fmt.Errorf("field violates regexp %v : %v", valid_field, k)
