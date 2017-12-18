@@ -83,16 +83,22 @@ const (
 	Remove_writer
 )
 
+type Writer_option struct {
+	Color        string
+	Include_file bool
+}
+
 var (
 	id128                      map[string]interface{}
 	default_writer             io.Writer
 	default_remove_ansi_escape remove_ansi_escape
-	default_color              = map[Priority]string{
-		Log_alert:   ansi.ColorCode("red+bh"),
-		Log_crit:    ansi.ColorCode("red+bh"),
-		Log_err:     ansi.ColorCode("red+bh"),
-		Log_warning: ansi.ColorCode("208+bh"), // orange
-		Log_notice:  ansi.ColorCode("208+bh"), // orange
+	default_color              = map[Priority]Writer_option{
+		Log_alert:   Writer_option{ansi.ColorCode("red+bh"), true},
+		Log_crit:    Writer_option{ansi.ColorCode("red+bh"), true},
+		Log_err:     Writer_option{ansi.ColorCode("red+bh"), true},
+		Log_warning: Writer_option{ansi.ColorCode("208+bh"), true}, // orange
+		Log_notice:  Writer_option{ansi.ColorCode("208+bh"), true}, // orange
+		Log_info:    Writer_option{``, false},
 	}
 	default_disable_journal = false
 	default_use_color       = true
@@ -573,7 +579,7 @@ func Set_default_writer(w io.Writer) option {
 //
 // example: map[Priority]string{Log_err: ansi.ColorCode("green")}
 //
-func Set_default_colors(colors map[Priority]string) {
+func Set_default_colors(colors map[Priority]Writer_option) {
 	package_lock.Lock()
 	defer package_lock.Unlock()
 	default_color = colors
@@ -629,7 +635,12 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 				cleaned_s = remove_re2.ReplaceAllLiteralString(s, ``)
 				if default_use_color {
 					package_lock.Lock()
-					fmt.Fprintf(w, default_color[priority]+cleaned_s+ansi.Reset)
+					var line string
+					if default_color[priority].Include_file {
+						_, f, l := file_line()
+						line = fmt.Sprintf("%v:%v ", f, l)
+					}
+					fmt.Fprintf(w, "%v%v", line, default_color[priority].Color+cleaned_s+ansi.Reset)
 					package_lock.Unlock()
 				} else {
 					fmt.Fprintf(w, cleaned_s)
@@ -637,7 +648,12 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 			} else {
 				if default_use_color {
 					package_lock.Lock()
-					fmt.Fprintf(w, default_color[priority]+s+ansi.Reset)
+					var line string
+					if default_color[priority].Include_file {
+						_, f, l := file_line()
+						line = fmt.Sprintf("%v:%v ", f, l)
+					}
+					fmt.Fprintf(w, "%v%v", line, default_color[priority].Color+s+ansi.Reset)
 					package_lock.Unlock()
 				} else {
 					fmt.Fprintf(w, s)
