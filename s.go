@@ -640,7 +640,11 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 						_, f, l := file_line()
 						line = fmt.Sprintf("%v:%v ", f, l)
 					}
-					fmt.Fprintf(w, "%v%v%v%v", default_color[priority].Color, line, cleaned_s, ansi.Reset)
+					reset := ``
+					if 0 < len(default_color[priority].Color) {
+						reset = ansi.Reset
+					}
+					fmt.Fprintf(w, "%v%v%v%v", default_color[priority].Color, line, cleaned_s, reset)
 					package_lock.Unlock()
 				} else {
 					fmt.Fprintf(w, cleaned_s)
@@ -653,7 +657,11 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 						_, f, l := file_line()
 						line = fmt.Sprintf("%v:%v ", f, l)
 					}
-					fmt.Fprintf(w, "%v%v%v%v", default_color[priority].Color, line, s, ansi.Reset)
+					reset := ``
+					if 0 < len(default_color[priority].Color) {
+						reset = ansi.Reset
+					}
+					fmt.Fprintf(w, "%v%v%v%v", default_color[priority].Color, line, s, reset)
 					package_lock.Unlock()
 				} else {
 					fmt.Fprintf(w, s)
