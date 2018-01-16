@@ -126,6 +126,7 @@ type Journal struct {
 	lock               sync.Mutex
 	add_go_code_fields bool
 	writer             io.Writer
+	stack_skip         int
 	remove             remove_ansi_escape
 	priority           Priority
 }
@@ -220,6 +221,7 @@ func New_journal_m(default_fields map[string]interface{}) *Journal {
 		priority:           Log_info,
 		remove:             default_remove_ansi_escape,
 		writer:             default_writer,
+		stack_skip:         4,
 	}
 	package_lock.Unlock()
 	j.Set_default_fields(default_fields)
@@ -293,14 +295,15 @@ func (j *Journal) load_defaults(message string, Priority Priority) map[string]in
 // You'll probably want to use Set_remove_ansi(sd.Remove_journal).
 // Default: Log_info.
 //
-func (j *Journal) Set_writer_priority(p Priority) {
+func (j *Journal) Set_writer_priority(p Priority) *Journal {
 	j.lock.Lock()
 	defer j.lock.Unlock()
 	j.priority = p
+	return j
 }
 
 // Writer implements io.Writer.
-// Allows Jhournal to be used in the log package.
+// Allows Journal to be used in the log package.
 // You might want to use Set_remove_ansi(true).
 // See http://godoc.org/log#SetOutput.
 //
@@ -536,6 +539,15 @@ func (j *Journal) Set_add_go_code_fields(use bool) {
 	j.add_go_code_fields = use
 }
 
+// Useful when file/line are not correct
+// default: 4
+func (j *Journal) Stack_skip(skip int) *Journal {
+	j.lock.Lock()
+	defer j.lock.Unlock()
+	j.stack_skip = skip
+	return j
+}
+
 // Set_message_id sets the systemd MESSAGE_ID (UUID) for all Journal
 // (Global) instances. Generate an application UUID with journalctl
 // --new-id128. See man journalctl.
@@ -637,7 +649,7 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 					package_lock.Lock()
 					var line string
 					if default_color[priority].Include_file {
-						_, f, l := file_line()
+						_, f, l := file_line(j.stack_skip)
 						line = fmt.Sprintf("%v:%v ", f, l)
 					}
 					reset := ``
@@ -654,7 +666,7 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 					package_lock.Lock()
 					var line string
 					if default_color[priority].Include_file {
-						_, f, l := file_line()
+						_, f, l := file_line(j.stack_skip)
 						line = fmt.Sprintf("%v:%v ", f, l)
 					}
 					reset := ``
@@ -685,7 +697,7 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 		return errors.New(fmt.Sprintf("Field count cannot exceed %v: %v given", max_fields, len(fields)))
 	}
 	if j.add_go_code_fields {
-		fn, file, line := file_line()
+		fn, file, line := file_line(j.stack_skip)
 		fields[sd_go_func] = fn
 		fields[sd_go_file] = file + `:` + strconv.Itoa(line)
 	}
@@ -726,9 +738,10 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 	return nil
 }
 
-func file_line() (fn string, file string, line int) {
+// 4
+func file_line(skip int) (fn string, file string, line int) {
 	pc := make([]uintptr, 1)
-	n := runtime.Callers(4, pc)
+	n := runtime.Callers(skip, pc)
 	if n == 0 {
 		return ``, ``, 0
 	}
