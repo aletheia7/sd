@@ -30,7 +30,7 @@ can take nil map in order to only use the format functionality.
 package sd
 
 /*
-#cgo pkg-config: --cflags --libs libsystemd
+#cgo pkg-config: libsystemd
 #include <stdlib.h>
 #include <systemd/sd-journal.h>
 #include <unistd.h>
