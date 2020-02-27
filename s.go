@@ -649,8 +649,10 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 					package_lock.Lock()
 					var line string
 					if default_color[priority].Include_file {
-						_, f, l := file_line(j.stack_skip)
-						line = fmt.Sprintf("%v:%v ", f, l)
+						if j.add_go_code_fields {
+							_, f, l := file_line(j.stack_skip)
+							line = fmt.Sprintf("%v:%v ", f, l)
+						}
 					}
 					reset := ``
 					if 0 < len(default_color[priority].Color) {
@@ -666,8 +668,10 @@ func (j *Journal) Send(fields map[string]interface{}) error {
 					package_lock.Lock()
 					var line string
 					if default_color[priority].Include_file {
-						_, f, l := file_line(j.stack_skip)
-						line = fmt.Sprintf("%v:%v ", f, l)
+						if j.add_go_code_fields {
+							_, f, l := file_line(j.stack_skip)
+							line = fmt.Sprintf("%v:%v ", f, l)
+						}
 					}
 					reset := ``
 					if 0 < len(default_color[priority].Color) {
