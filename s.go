@@ -2,9 +2,10 @@
 // governed by a BSD-2-Clause license that can be found in the LICENSE file.
 // +build linux
 
-/*
-Package sd provides methods to write to the systemd-journal.
+// Package sd provides methods to write to the systemd-journal.
+package sd
 
+/*
 New_journal() and New_journal_m() create a Journal struct.
 Journal.Emerg(), Journal.Alert(), Journal.Crit(), Journal.Err(),
 Journal.Warning(), Journal.Notice(), Journal.Info(), Journal.Debug() write
@@ -25,8 +26,6 @@ Each of the methods will add journal fields GO_LINE, and GO_FUNC fields to
 the journal to indicate where the methods were called. The *_m_f methods
 can take nil map in order to only use the format functionality.
 */
-
-package sd
 
 /*
 #cgo pkg-config: libsystemd
