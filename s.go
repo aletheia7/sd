@@ -1,9 +1,8 @@
 // Copyright 2016 aletheia7. All rights reserved. Use of this source code is
 // governed by a BSD-2-Clause license that can be found in the LICENSE file.
+// +build linux
+
 /*
-
-// +build linux,cgo
-
 Package sd provides methods to write to the systemd-journal.
 
 New_journal() and New_journal_m() create a Journal struct.
