@@ -39,7 +39,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/aletheia7/sd/ansi"
+	"github.com/aletheia7/sd/v6/ansi"
 	"io"
 	"log/syslog"
 	"os"
