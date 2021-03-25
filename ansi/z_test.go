@@ -2,7 +2,7 @@ package ansi_test
 
 import (
 	"fmt"
-	. "github.com/aletheia7/sd/v6/ansi"
+	. "github.com/aletheia7/sd/ansi"
 	"sort"
 	"strings"
 	"testing"

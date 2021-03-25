@@ -5,7 +5,7 @@
 package sd_test
 
 import (
-	"github.com/aletheia7/sd/v6"
+	"github.com/aletheia7/sd"
 )
 
 func ExampleJournal() {
